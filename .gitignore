@@ -1,23 +1,56 @@
-﻿# 运行时产物（NapCat 解包、配置、日志、登录态）
+# ---------- 运行时产物 ----------
 runtime/
 logs/
 *.log
 
-# 本机路径配置（各机器不同）
-qq-root.txt
+# ---------- 缓存 / 临时 ----------
+.cache/
+cache/
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+downloads/
 
-# Node
-node_modules/
-
-# Python
+# ---------- Python ----------
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 .venv/
+venv/
+env/
 
-# 密钥
+# ---------- Node ----------
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- 构建产物 ----------
+dist/
+build/
+*.tsbuildinfo
+
+# ---------- 密钥 / 本机配置 ----------
 .env
+.env.*
+!.env.example
+qq-root.txt
 *.token
+*.pem
+*.key
 
-# 系统
+# ---------- 编辑器 / 系统 ----------
+.vscode/
+.idea/
+*.swp
 Thumbs.db
 .DS_Store
+desktop.ini
