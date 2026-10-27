@@ -1,0 +1,23 @@
+﻿# 运行时产物（NapCat 解包、配置、日志、登录态）
+runtime/
+logs/
+*.log
+
+# 本机路径配置（各机器不同）
+qq-root.txt
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# 密钥
+.env
+*.token
+
+# 系统
+Thumbs.db
+.DS_Store
