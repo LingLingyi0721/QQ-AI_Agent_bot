@@ -40,6 +40,8 @@ src/              bot 主体代码（预留）
   - `.env` 里的 `LLM_*`、`ONEBOT_WS_URL`、`ONEBOT_ACCESS_TOKEN` 会覆盖 yaml 同名项
 - 回复超过 `max_reply_chars` 时按段落 / 句号切分成多条发送；同一会话串行处理，避免乱序。
 
+人设按 `llm.model` 自动选择：`config/personas/` 下 deepseek / claude / gpt / gemini / qwen / glm 六份社区二创人格，由 `llm.persona_map` 关键字匹配（小写包含，长关键字优先），未命中走 default。显式写 `system_prompt_file` 可强制覆盖。
+
 ## 快速开始
 
 ```powershell

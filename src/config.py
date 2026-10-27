@@ -30,7 +30,21 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "timeout": 60,
         "history_turns": 8,
         "history_ttl_minutes": 60,
-        "system_prompt_file": "config/personas/default.txt",
+        "system_prompt_file": "",
+        "persona_dir": "config/personas",
+        "persona_map": {
+            "deepseek": "deepseek.txt",
+            "claude": "claude.txt",
+            "gpt": "gpt.txt",
+            "o1": "gpt.txt",
+            "o3": "gpt.txt",
+            "gemini": "gemini.txt",
+            "qwen": "qwen.txt",
+            "tongyi": "qwen.txt",
+            "glm": "glm.txt",
+            "chatglm": "glm.txt",
+            "default": "default.txt",
+        },
     },
     "reply": {
         "private_enabled": True,
@@ -143,10 +157,28 @@ def resolve_path(cfg: dict[str, Any], value: str | Path) -> Path:
     return Path(cfg.get("root", ROOT)) / p
 
 
+def resolve_persona_path(cfg: dict[str, Any]) -> Path:
+    """人设文件：显式 system_prompt_file 优先；否则按 model 名关键字匹配 persona_map。"""
+    llm = cfg.get("llm") or {}
+    explicit = str(llm.get("system_prompt_file") or "").strip()
+    if explicit:
+        return resolve_path(cfg, explicit)
+    persona_dir = str(llm.get("persona_dir") or "config/personas")
+    mapping = llm.get("persona_map") or {}
+    model = str(llm.get("model") or "").lower()
+    chosen = ""
+    for key in sorted((k for k in mapping if k != "default"), key=len, reverse=True):
+        if key and key in model:
+            chosen = str(mapping[key])
+            break
+    if not chosen:
+        chosen = str(mapping.get("default") or "default.txt")
+    return resolve_path(cfg, f"{persona_dir.rstrip('/')}/{chosen}")
+
+
 def load_persona(cfg: dict[str, Any]) -> str:
     """读取人设文本；文件缺失或为空时回退内置人设。"""
-    rel = cfg["llm"].get("system_prompt_file") or "config/personas/default.txt"
-    path = resolve_path(cfg, rel)
+    path = resolve_persona_path(cfg)
     try:
         text = path.read_text(encoding="utf-8").strip()
     except OSError as exc:

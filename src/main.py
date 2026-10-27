@@ -7,7 +7,7 @@ import logging
 import signal
 import sys
 
-from .config import load_config, load_persona, mask_key, resolve_path
+from .config import load_config, load_persona, mask_key, resolve_path, resolve_persona_path
 from .context import ContextStore
 from .handler import MessageHandler
 from .llm import LLMClient
@@ -49,7 +49,7 @@ def _log_startup(cfg: dict, persona_path) -> None:
         llm.get("base_url"),
         mask_key(llm.get("api_key", "")),
     )
-    logger.info("人设文件 : %s", persona_path)
+    logger.info("人设     : %s (%s)", persona_path.name, llm_cfg.get("model"))
     logger.info("触发规则 : %s", _rule_summary(cfg))
 
 
@@ -81,7 +81,7 @@ async def run() -> int:
         logger.warning(warning)
 
     llm_cfg = cfg["llm"]
-    persona_path = resolve_path(cfg, llm_cfg.get("system_prompt_file", ""))
+    persona_path = resolve_persona_path(cfg)
     persona = load_persona(cfg)
     context_file = resolve_path(cfg, cfg["storage"].get("context_file", "data/context.json"))
 
