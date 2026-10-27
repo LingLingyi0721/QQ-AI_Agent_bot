@@ -43,6 +43,8 @@ build/
 .env.*
 !.env.example
 qq-root.txt
+config/config.yaml
+data/
 *.token
 *.pem
 *.key

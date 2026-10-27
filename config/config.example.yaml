@@ -1,0 +1,27 @@
+onebot:
+  ws_url: ws://127.0.0.1:3001
+  access_token: ""
+  reconnect_initial: 3
+  reconnect_max: 30
+
+llm:
+  temperature: 0.7
+  max_tokens: 1024
+  timeout: 60
+  history_turns: 8
+  history_ttl_minutes: 60
+  system_prompt_file: config/personas/default.txt
+
+reply:
+  private_enabled: true
+  group_enabled: true
+  group_require_at: true
+  command_prefix: "/ai "
+  cooldown_seconds: 3
+  max_reply_chars: 800
+  error_reply: "（我这边暂时想不出话，等会儿再说）"
+  whitelist_groups: []
+  blacklist_users: []
+
+storage:
+  context_file: data/context.json

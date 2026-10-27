@@ -16,6 +16,50 @@ src/              bot 主体代码（预留）
 - 非安装版 QQ 位于 `qq-root.txt` 指定的目录
 - 版本定位只读该目录内 `versions\config.json`，不读注册表、不用全局变量
 
+## 架构
+
+- 接入方式：**OneBot11 正向 WebSocket**。bot 作为 WS 客户端连 NapCat 暴露的 `ws://127.0.0.1:3001`（NapCat 侧开启「WebSocket 服务器」），不用反向 HTTP。
+- 大模型：**OpenAI 兼容**的 `/chat/completions` 接口（DeepSeek / OpenAI / 第三方中转均可），只依赖 `aiohttp`，不引入官方 SDK。
+- 代码结构：
+  - `src/config.py` 配置加载（yaml + .env + 环境变量覆盖）
+  - `src/onebot.py` WS 连接、收事件、调 action、断线指数退避重连
+  - `src/llm.py` chat/completions 调用
+  - `src/context.py` 按会话存上下文（JSON 原子落盘 + TTL）
+  - `src/handler.py` 事件解析、触发判定、冷却、回复切分
+  - `src/main.py` 入口，SIGINT 优雅退出
+- 上下文 key：私聊 `private:<user_id>`，群聊 `group:<group_id>:<user_id>`；只保留最近 `history_turns * 2` 条消息，超 `history_ttl_minutes` 未使用自动丢弃。
+- 触发规则（`config/config.yaml` 的 `reply` 段）：
+  1. 自己发的消息、`blacklist_users` 里的用户 → 不回
+  2. 私聊：`private_enabled` 为 true 才回
+  3. 群聊：`group_enabled` 必须为 true；`whitelist_groups` 非空时只回白名单群；`group_require_at` 为 true 时必须 @ 到 bot
+  4. `command_prefix`（默认 `/ai `）优先于 @ 要求：`/ai 你好` 在允许的群里不 @ 也生效，前缀会被剥离
+  5. 清洗后文本为空 → 不回
+- 配置分工：
+  - `config/config.yaml`：行为与连接参数（WS 地址、触发规则、冷却、切分长度、存储路径），**不入库**
+  - `.env`：密钥与模型（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`），**不入库**
+  - `.env` 里的 `LLM_*`、`ONEBOT_WS_URL`、`ONEBOT_ACCESS_TOKEN` 会覆盖 yaml 同名项
+- 回复超过 `max_reply_chars` 时按段落 / 句号切分成多条发送；同一会话串行处理，避免乱序。
+
+## 快速开始
+
+```powershell
+# 1. 装依赖（aiohttp / python-dotenv / PyYAML）
+pip install -r requirements.txt
+
+# 2. 复制配置
+Copy-Item config\config.example.yaml config\config.yaml
+Copy-Item .env.example .env
+# 编辑 .env，至少填 LLM_API_KEY（默认 DeepSeek，可换任意 OpenAI 兼容地址）
+
+# 3. 自检（只检查不启动）
+pwsh -NoProfile -File .\scripts\start-bot.ps1 -DryRun
+
+# 4. 启动
+pwsh -NoProfile -File .\scripts\start-bot.ps1
+```
+
+启动前 NapCat 需已登录并开启 OneBot11 的 WebSocket 服务端（默认端口 3001）。WS 地址与 access token 在 `config/config.yaml` 的 `onebot` 段或 `.env` 里改。
+
 ## 使用
 
 ```powershell
