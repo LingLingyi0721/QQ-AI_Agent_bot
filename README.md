@@ -42,6 +42,9 @@ src/              bot 主体代码（预留）
 
 人设按 `llm.model` 自动选择：`config/personas/` 下 deepseek / claude / gpt / gemini / qwen / glm 六份社区二创人格，由 `llm.persona_map` 关键字匹配（小写包含，长关键字优先），未命中走 default。显式写 `system_prompt_file` 可强制覆盖。
 
+人设素材来源：[ai-gijinka-art-world](https://github.com/Tests4gptplay/ai-gijinka-art-world)（commit c2e0492）。该库为社区二创视觉/人物档案，非厂商官方设定，明确留白的性格我们也不补。
+本地人设文本为按档案重写的中文精简版，仅用于本 bot 的 system prompt。
+
 ## 快速开始
 
 ```powershell
