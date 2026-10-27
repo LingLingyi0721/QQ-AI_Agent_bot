@@ -44,6 +44,9 @@ src/              bot 主体代码（预留）
 
 人设素材来源：[ai-gijinka-art-world](https://github.com/Tests4gptplay/ai-gijinka-art-world)（commit c2e0492）。该库为社区二创视觉/人物档案，非厂商官方设定，明确留白的性格我们也不补。
 本地人设文本为按档案重写的中文精简版，仅用于本 bot 的 system prompt。
+署名链（DeepSeek 部分）：上善无形（鲸鱼娘原型）→ ZipZipPipe（DeepSeek 女仆二创）。
+许可：上述来源库与人设文本改编部分均以 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) 提供——署名、非商业性使用、相同方式共享。
+适用范围：仅限 `config/personas/` 下的人设文本，不涉及本项目代码与其它文件。
 
 ## 快速开始
 
