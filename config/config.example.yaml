@@ -8,6 +8,7 @@ llm:
   temperature: 0.7
   max_tokens: 1024
   timeout: 60
+  reasoning_effort: ""   # 可选：low / medium / high，留空则不下发该参数
   history_turns: 8
   history_ttl_minutes: 60
   # 人设：显式指定优先，留空则按 model 名匹配 persona_map（小写包含匹配，长关键字优先）

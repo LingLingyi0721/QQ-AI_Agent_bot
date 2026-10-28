@@ -1,4 +1,4 @@
-﻿# QQ-AI_Agent_bot
+# QQ-AI_Agent_bot
 
 基于本机非安装版 QQNT（工作目录 `E:\APP\QQ-AI_Agent`）做非官方 AI 聊天 bot，通过 NapCat 进程内注入接入 OneBot11。本项目位于该工作区内 `QQ-AI_Agent_bot` 子目录，与 QQ 本体目录同处一个工作区。
 
@@ -78,6 +78,29 @@ pwsh -File .\scripts\start-qq-napcat.ps1 -DryRun
 pwsh -File .\scripts\start-qq-napcat.ps1
 ```
 
+## GUI 配置面板
+
+WinUI 3 / Fluent 2 风格的本地 WPF 控制面板（`gui/`，零 NuGet 依赖），只负责改 `.env` 里的四个键，不替代 yaml。
+
+```powershell
+# 构建（产物在 gui\bin\Release\net10.0-windows\）
+dotnet build gui\QQAgent.Gui.csproj -c Release
+
+# 正常启动
+.\gui\bin\Release\net10.0-windows\QQAgent.Gui.exe
+
+# 自检：正常建窗，2 秒后自动关闭，退出码 0
+.\gui\bin\Release\net10.0-windows\QQAgent.Gui.exe --selftest
+
+# 截图：把窗口内容渲染成 PNG 后退出
+.\gui\bin\Release\net10.0-windows\QQAgent.Gui.exe --screenshot .cache\gui-shot.png
+```
+
+- 只管 `.env` 的 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` / `LLM_REASONING_EFFORT`，其它键与注释顺序原样保留（UTF-8 无 BOM，临时文件 + 替换写入）
+- 「思考等级」映射：关闭 → 空值（不下发）；低 → `low`；中 → `medium`；高 → `high`。服务端返回 400 且响应体提到 `reasoning_effort` 时，`src/llm.py` 会去掉该参数重试一次
+- 人设文件按模型名自动推断（与 `llm.persona_map` 同规则），在面板里只读展示
+- 「运行控制」启动前会校验 `LLM_API_KEY` 非空；Bot 的 stdout / stderr 实时进「日志」页
+- 未捕获异常写 `gui/error.log` 并弹窗提示
 ## 风险
 
 非官方接口，违反 QQ 协议，有封号风险，建议小号。

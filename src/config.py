@@ -28,6 +28,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "temperature": 0.7,
         "max_tokens": 1024,
         "timeout": 60,
+        "reasoning_effort": "",
         "history_turns": 8,
         "history_ttl_minutes": 60,
         "system_prompt_file": "",
@@ -123,6 +124,8 @@ def load_config(config_path: str | Path | None = None) -> dict[str, Any]:
         cfg["llm"]["base_url"] = env["LLM_BASE_URL"]
     if env.get("LLM_MODEL"):
         cfg["llm"]["model"] = env["LLM_MODEL"]
+    if env.get("LLM_REASONING_EFFORT"):
+        cfg["llm"]["reasoning_effort"] = env["LLM_REASONING_EFFORT"]
     if env.get("LLM_API_KEY"):
         cfg["llm"]["api_key"] = env["LLM_API_KEY"]
     else:

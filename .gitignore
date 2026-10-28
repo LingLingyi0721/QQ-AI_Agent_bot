@@ -56,3 +56,7 @@ data/
 Thumbs.db
 .DS_Store
 desktop.ini
+# ---------- GUI (WPF) ----------
+gui/bin/
+gui/obj/
+gui/error.log
