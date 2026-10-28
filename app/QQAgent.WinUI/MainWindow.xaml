@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Window
     x:Class="QQAgent.WinUI.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -24,7 +24,7 @@
             <Border x:Name="TitleBarRightSpacer" Grid.Column="2" Width="140" />
         </Grid>
 
-        <!-- 紧凑模式起步：收起只显示图标，悬停 350ms 展开，点击导航项后常驻展开 -->
+        <!-- 任务管理器式侧栏：收起只显示图标栏，只由汉堡按钮开合；点导航项不收起、不悬停展开 -->
         <NavigationView
             x:Name="NavView"
             Grid.Row="1"
@@ -53,14 +53,6 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
-
-            <NavigationView.PaneFooter>
-                <TextBlock
-                    Text="v0.1 · WinUI3"
-                    FontSize="12"
-                    Margin="16,8,16,12"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </NavigationView.PaneFooter>
 
             <Frame x:Name="ContentFrame" />
         </NavigationView>

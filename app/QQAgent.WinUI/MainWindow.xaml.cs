@@ -8,8 +8,6 @@ using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using QQAgent.WinUI.Pages;
 using QQAgent.WinUI.Services;
@@ -21,13 +19,7 @@ namespace QQAgent.WinUI;
 
 public sealed partial class MainWindow : Window
 {
-    /// <summary>悬停多久后自动展开侧栏（毫秒）。</summary>
-
-    private const int PaneHoverDelayMs = 350;
-
     private readonly UISettings _uiSettings = new();
-
-    private readonly DispatcherTimer _paneHoverTimer = new();
 
     private readonly Dictionary<string, Type> _pages = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -46,14 +38,6 @@ public sealed partial class MainWindow : Window
 
     private bool _closeConfirmed;
 
-    /// <summary>侧栏已「点开即常驻」，移出不再自动收起。</summary>
-
-    private bool _panePinned;
-
-    /// <summary>指针当前是否停在收起状态的图标栏范围内。</summary>
-
-    private bool _pointerInPaneStrip;
-
     public MainWindow()
     {
         InitializeComponent();
@@ -64,7 +48,6 @@ public sealed partial class MainWindow : Window
         SetTitleBar(TitleBarGrid);
 
         SetupNavigation();
-        SetupPaneHover();
         Activated += OnWindowActivated;
         Closed += OnWindowClosed;
         _uiSettings.ColorValuesChanged += OnColorValuesChanged;
@@ -109,16 +92,7 @@ public sealed partial class MainWindow : Window
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
-        _paneHoverTimer.Stop();
-        _paneHoverTimer.Tick -= OnPaneHoverTimerTick;
-
-        NavView.PointerEntered -= OnNavPointerEntered;
-        NavView.PointerMoved -= OnNavPointerMoved;
-        NavView.PointerExited -= OnNavPointerExited;
-        NavView.PointerPressed -= OnNavPointerPressed;
         NavView.ItemInvoked -= OnNavItemInvoked;
-        NavView.PaneClosing -= OnPaneClosing;
-        NavView.PaneClosed -= OnPaneClosed;
 
         _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
         Activated -= OnWindowActivated;
@@ -248,8 +222,6 @@ public sealed partial class MainWindow : Window
     private void SetupNavigation()
     {
         NavView.ItemInvoked += OnNavItemInvoked;
-        NavView.PaneClosing += OnPaneClosing;
-        NavView.PaneClosed += OnPaneClosed;
 
         ApplySettingsItemText();
 
@@ -279,9 +251,6 @@ public sealed partial class MainWindow : Window
 
     private void OnNavItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
-        // 点任意导航项（或汉堡）后展开并常驻，之后移出不再收起
-        _panePinned = true;
-
         if (args.IsSettingsInvoked)
         {
             NavigateTo(typeof(SettingsPage));
@@ -303,15 +272,6 @@ public sealed partial class MainWindow : Window
         {
             ContentFrame.Navigate(pageType);
         }
-
-        // LeftCompact 下导航会顺手收起侧栏，这里在布局之后重新撑开
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (_panePinned && !NavView.IsPaneOpen)
-            {
-                NavView.IsPaneOpen = true;
-            }
-        });
     }
 
     private void SelectSettingsItem()
@@ -324,184 +284,6 @@ public sealed partial class MainWindow : Window
         {
             Debug.WriteLine(ex.ToString());
         }
-    }
-
-    // ---- 侧边栏悬停展开 ----
-
-    private void SetupPaneHover()
-    {
-        _paneHoverTimer.Interval = TimeSpan.FromMilliseconds(PaneHoverDelayMs);
-        _paneHoverTimer.Tick += OnPaneHoverTimerTick;
-
-        NavView.PointerEntered += OnNavPointerEntered;
-        NavView.PointerMoved += OnNavPointerMoved;
-        NavView.PointerExited += OnNavPointerExited;
-        NavView.PointerPressed += OnNavPointerPressed;
-    }
-
-    /// <summary>指针是否落在「当前状态的侧栏」宽度范围内（收起 = 图标栏宽度）。</summary>
-
-    private bool IsPointerInPaneStrip(Windows.Foundation.Point position)
-    {
-        if (position.X < 0 || position.Y < 0)
-        {
-            return false;
-        }
-
-        var stripWidth = NavView.IsPaneOpen ? NavView.OpenPaneLength : NavView.CompactPaneLength;
-        return position.X <= stripWidth;
-    }
-
-    private void OnNavPointerEntered(object sender, PointerRoutedEventArgs e)
-    {
-        if (NavView.IsPaneOpen)
-        {
-            return;
-        }
-
-        if (!IsPointerInPaneStrip(e.GetCurrentPoint(NavView).Position))
-        {
-            return;
-        }
-
-        _pointerInPaneStrip = true;
-        if (!_paneHoverTimer.IsEnabled)
-        {
-            _paneHoverTimer.Start();
-        }
-    }
-
-    /// <summary>指针划过时判定进/出侧栏：进入启动定时器，离开按常驻状态收起。</summary>
-
-    private void OnNavPointerMoved(object sender, PointerRoutedEventArgs e)
-    {
-        var inside = IsPointerInPaneStrip(e.GetCurrentPoint(NavView).Position);
-
-        if (!inside)
-        {
-            _pointerInPaneStrip = false;
-            _paneHoverTimer.Stop();
-            CollapsePaneIfNotPinned();
-            return;
-        }
-
-        if (_pointerInPaneStrip)
-        {
-            return;
-        }
-
-        _pointerInPaneStrip = true;
-        if (!NavView.IsPaneOpen && !_paneHoverTimer.IsEnabled)
-        {
-            _paneHoverTimer.Start();
-        }
-    }
-
-    private void OnNavPointerExited(object sender, PointerRoutedEventArgs e)
-    {
-        _pointerInPaneStrip = false;
-        _paneHoverTimer.Stop();
-        CollapsePaneIfNotPinned();
-    }
-
-    private void OnPaneHoverTimerTick(object? sender, object e)
-    {
-        _paneHoverTimer.Stop();
-
-        if (!_pointerInPaneStrip || NavView.IsPaneOpen)
-        {
-            return;
-        }
-
-        try
-        {
-            NavView.IsPaneOpen = true;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine(ex.ToString());
-        }
-    }
-
-    /// <summary>移出收起：常驻（点过导航项/汉堡）后不再自动收起。</summary>
-
-    private void CollapsePaneIfNotPinned()
-    {
-        if (_panePinned || !NavView.IsPaneOpen)
-        {
-            return;
-        }
-
-        try
-        {
-            NavView.IsPaneOpen = false;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine(ex.ToString());
-        }
-    }
-
-    /// <summary>点汉堡按钮：按下瞬间记录开合意图，展开即视为常驻。</summary>
-
-    private void OnNavPointerPressed(object sender, PointerRoutedEventArgs e)
-    {
-        if (!IsPaneToggleSource(e.OriginalSource))
-        {
-            return;
-        }
-
-        // 按下时侧栏已展开，说明这次点击是收起，常驻状态同步解除
-        _panePinned = !NavView.IsPaneOpen;
-        if (_panePinned)
-        {
-            try
-            {
-                NavView.IsPaneOpen = true;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex.ToString());
-            }
-        }
-    }
-
-    /// <summary>命中的元素是否属于汉堡按钮（NavigationView 模板里的 ToggleButton）。</summary>
-
-    private bool IsPaneToggleSource(object? source)
-    {
-        var node = source as DependencyObject;
-        for (var depth = 0; node is not null && depth < 16; depth++)
-        {
-            if (node is ToggleButton)
-            {
-                return true;
-            }
-
-            if (ReferenceEquals(node, NavView))
-            {
-                return false;
-            }
-
-            node = VisualTreeHelper.GetParent(node);
-        }
-
-        return false;
-    }
-
-    /// <summary>常驻状态下禁止 NavigationView 自己把侧栏收掉（点击导航项后不收回）。</summary>
-
-    private void OnPaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
-    {
-        if (_panePinned)
-        {
-            args.Cancel = true;
-        }
-    }
-
-    private void OnPaneClosed(NavigationView sender, object args)
-    {
-        _paneHoverTimer.Stop();
     }
 
     // ---- 关闭窗口：Bot 仍在运行时先确认 ----

@@ -6,6 +6,7 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>QQAgent.WinUI</RootNamespace>
     <AssemblyName>QQAgent.WinUI</AssemblyName>
+    <Version>0.1.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
     <Platforms>x64</Platforms>

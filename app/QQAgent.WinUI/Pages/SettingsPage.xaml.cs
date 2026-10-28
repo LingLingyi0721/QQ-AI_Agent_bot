@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -18,6 +18,7 @@ public sealed partial class SettingsPage : Page
     {
         InitializeComponent();
         Loaded += OnPageLoaded;
+        SetVersionText();
     }
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
@@ -161,5 +162,11 @@ public sealed partial class SettingsPage : Page
         App.Settings.AccentColor = ThemeService.ToHex(_pendingAccent);
         App.Settings.Save();
         ThemeService.ApplyAccent(App.Settings);
+    }
+
+    private void SetVersionText()
+    {
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        VersionText.Text = "版本 v" + (version is null ? "0.1.0" : version.ToString(3));
     }
 }

@@ -79,6 +79,16 @@
                     </StackPanel>
                 </Border>
 
+                <!-- 卡片：关于 -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="关于" Style="{StaticResource SectionTitleStyle}" />
+                        <TextBlock x:Name="VersionText" Text="版本 v0.1.0" Style="{StaticResource SecondaryTextStyle}" />
+                        <TextBlock Text="界面 WinUI 3" Style="{StaticResource SecondaryTextStyle}" />
+                        <TextBlock Text="运行时 .NET 10 / Windows App SDK 1.8" Style="{StaticResource SecondaryTextStyle}" />
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </Grid>
     </ScrollViewer>
