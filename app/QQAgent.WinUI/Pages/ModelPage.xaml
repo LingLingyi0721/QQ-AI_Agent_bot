@@ -24,6 +24,7 @@
                         <TextBlock Text="服务商" Style="{StaticResource SectionTitleStyle}" />
                         <ComboBox
                             x:Name="ProviderCombo"
+                            AutomationProperties.AutomationId="ProviderCombo"
                             HorizontalAlignment="Stretch"
                             SelectionChanged="OnProviderSelectionChanged">
                             <ComboBox.ItemTemplate>
@@ -52,6 +53,7 @@
                             <TextBlock Text="模型名" Style="{StaticResource SecondaryTextStyle}" />
                             <TextBox
                                 x:Name="ModelBox"
+                                AutomationProperties.AutomationId="ModelBox"
                                 PlaceholderText="deepseek-chat"
                                 TextChanged="OnModelTextChanged" />
                         </StackPanel>
@@ -88,7 +90,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 卡片 3：人设 -->
+                <!-- 卡片 3：人设（一套控件：模式单选 + 下拉 + 编辑） -->
                 <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="人设" Style="{StaticResource SectionTitleStyle}" />
@@ -101,12 +103,7 @@
                             <RadioButton Content="自定义" />
                         </RadioButtons>
 
-                        <TextBox
-                            x:Name="PersonaAutoBox"
-                            IsReadOnly="True"
-                            Foreground="{ThemeResource TextFillColorDisabledBrush}" />
-
-                        <Grid x:Name="PersonaCustomPanel" ColumnSpacing="8" Visibility="Collapsed">
+                        <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -116,17 +113,24 @@
                                 x:Name="PersonaCombo"
                                 Grid.Column="0"
                                 HorizontalAlignment="Stretch"
-                                SelectionChanged="OnPersonaSelectionChanged" />
+                                AutomationProperties.AutomationId="PersonaCombo"
+                                SelectionChanged="OnPersonaSelectionChanged">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:PersonaOption">
+                                        <TextBlock Text="{x:Bind DisplayText}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
 
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                                <Button Content="编辑" Click="OnEditPersonaClicked" />
-                                <Button Content="导入" Click="OnImportPersonaClicked" />
-                                <Button Content="新建" Click="OnNewPersonaClicked" />
-                            </StackPanel>
+                            <Button
+                                x:Name="EditPersonaButton"
+                                Grid.Column="1"
+                                Content="编辑"
+                                AutomationProperties.AutomationId="EditPersonaButton"
+                                Click="OnEditPersonaClicked" />
                         </Grid>
                     </StackPanel>
                 </Border>
-
                 <!-- 卡片 4：思考等级 -->
                 <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel Spacing="10">
@@ -162,4 +166,7 @@
         </Grid>
     </ScrollViewer>
 </Page>
+
+
+
 

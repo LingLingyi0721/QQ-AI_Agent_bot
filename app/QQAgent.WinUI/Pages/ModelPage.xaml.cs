@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using QQAgent.WinUI.Dialogs;
 using QQAgent.WinUI.Models;
@@ -16,6 +18,11 @@ public sealed partial class ModelPage : Page
     private string? _botRoot;
     private bool _loading;
     private bool _loadedOnce;
+
+    /// <summary>刷新人设下拉内容时抑制 SelectionChanged。</summary>
+    private bool _refreshingPersona;
+
+    /// <summary>回填期间写入的值，仅用于识别 ComboBox 异步补发的那一次 SelectionChanged。</summary>
     private string? _suppressUrl;
     private string? _suppressModel;
 
@@ -34,6 +41,10 @@ public sealed partial class ModelPage : Page
 
         Loaded += OnPageLoaded;
     }
+
+    private bool IsCustomMode => PersonaMode.SelectedIndex == 1;
+
+    private PersonaItem? SelectedPersona => (PersonaCombo.SelectedItem as PersonaOption)?.Target;
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
     {
@@ -71,21 +82,15 @@ public sealed partial class ModelPage : Page
             ReasonLevel.SelectedIndex = EffortToIndex(env.ReasoningEffort);
 
             _personas = PersonaStore.ListAll(_botRoot ?? string.Empty);
-            PersonaCombo.ItemsSource = _personas;
 
             var customMode = string.Equals(env.PersonaMode, "custom", StringComparison.OrdinalIgnoreCase);
             PersonaMode.SelectedIndex = customMode ? 1 : 0;
             ApplyPersonaMode();
 
-            if (customMode && SelectPersonaByPath(env.PersonaFile))
+            if (customMode)
             {
-                PersonaAutoBox.Text = PersonaCombo.SelectedItem is PersonaItem picked
-                    ? Path.GetFileName(picked.RelativePath)
-                    : string.Empty;
-            }
-            else
-            {
-                PersonaAutoBox.Text = Presets.InferPersona(env.Model);
+                SelectPersonaByPath(env.PersonaFile);
+                UpdatePersonaAutomationName();
             }
 
             SaveButton.IsEnabled = _botRoot is not null;
@@ -99,6 +104,13 @@ public sealed partial class ModelPage : Page
         {
             _loading = false;
         }
+
+        // 回填标志只用于吞掉一次异步补发；延迟清空，避免把用户第一次切换服务商也当成回填吞掉。
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            _suppressUrl = null;
+            _suppressModel = null;
+        });
     }
 
     /// <summary>先按 Base URL 认预设，认不出再回落到 settings.json 里记的 id。</summary>
@@ -132,6 +144,8 @@ public sealed partial class ModelPage : Page
             return;
         }
 
+        _suppressUrl = null;
+        _suppressModel = null;
         ResetPrimaryState();
 
         // 自定义清空，其它预设覆盖 URL 与模型名
@@ -146,29 +160,30 @@ public sealed partial class ModelPage : Page
             ModelBox.Text = preset.DefaultModel;
         }
 
+        // 不依赖 TextChanged 的时序：切换服务商后显式刷新一次人设显示
+        UpdatePersonaFromModel();
+
         _settings.Provider = preset.Id;
         _settings.Save();
     }
 
-
     private void OnBaseUrlChanged(object sender, TextChangedEventArgs e)
-    {
-        ResetPrimaryState();
-    }
-
-    private void OnModelTextChanged(object sender, TextChangedEventArgs e)
     {
         if (!_loading)
         {
             ResetPrimaryState();
         }
+    }
 
-        if (PersonaMode.SelectedIndex == 1)
+    private void OnModelTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_loading)
         {
             return;
         }
 
-        PersonaAutoBox.Text = Presets.InferPersona(ModelBox.Text);
+        ResetPrimaryState();
+        UpdatePersonaFromModel();
     }
 
     private void OnApiKeyPasswordChanged(object sender, RoutedEventArgs e)
@@ -234,51 +249,96 @@ public sealed partial class ModelPage : Page
         ApplyPersonaMode();
     }
 
-    /// <summary>两个模式的控件互斥显示；默认模式只读框显示自动推断的文件名。</summary>
+    /// <summary>默认：下拉禁用，只显示当前模型对应的人设文件名；自定义：下拉可选、编辑可点。</summary>
     private void ApplyPersonaMode()
     {
-        var custom = PersonaMode.SelectedIndex == 1;
-        PersonaCustomPanel.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
+        var custom = IsCustomMode;
+        PersonaCombo.IsEnabled = custom;
+        EditPersonaButton.IsEnabled = custom;
 
-        if (!custom)
+        if (custom)
         {
-            PersonaAutoBox.Text = Presets.InferPersona(ModelBox.Text);
-            return;
-        }
-
-        if (PersonaCombo.SelectedIndex < 0 && _personas.Count > 0)
-        {
-            PersonaCombo.SelectedIndex = 0;
-        }
-
-        if (PersonaCombo.SelectedItem is PersonaItem item)
-        {
-            PersonaAutoBox.Text = Path.GetFileName(item.RelativePath);
+            ShowPersonaList();
         }
         else
         {
-            PersonaAutoBox.Text = string.Empty;
+            ShowAutoPersona();
         }
+    }
+
+    /// <summary>默认模式：下拉只有一项只读内容，文本是纯文件名（如 deepseek.txt）。</summary>
+    private void ShowAutoPersona()
+    {
+        var file = Presets.InferPersona(ModelBox.Text);
+
+        _refreshingPersona = true;
+        try
+        {
+            PersonaCombo.ItemsSource = new List<PersonaOption> { new(file, null) };
+            PersonaCombo.SelectedIndex = 0;
+            AutomationProperties.SetName(PersonaCombo, file);
+        }
+        finally
+        {
+            _refreshingPersona = false;
+        }
+    }
+
+    /// <summary>自定义模式：列出内置与 custom 下全部 .txt（显示名去扩展名）。</summary>
+    private void ShowPersonaList()
+    {
+        var keep = SelectedPersona?.RelativePath;
+        var options = new List<PersonaOption>(_personas.Count);
+        foreach (var item in _personas)
+        {
+            options.Add(new PersonaOption(item.DisplayName, item));
+        }
+
+        _refreshingPersona = true;
+        try
+        {
+            PersonaCombo.ItemsSource = options;
+            if (keep is null || !SelectPersonaByPath(keep))
+            {
+                PersonaCombo.SelectedIndex = options.Count > 0 ? 0 : -1;
+            }
+        }
+        finally
+        {
+            _refreshingPersona = false;
+        }
+
+        UpdatePersonaAutomationName();
     }
 
     private void OnPersonaSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loading)
+        if (_loading || _refreshingPersona)
         {
             return;
         }
 
         ResetPrimaryState();
-
-        PersonaAutoBox.Text = PersonaCombo.SelectedItem is PersonaItem item
-            ? Path.GetFileName(item.RelativePath)
-            : string.Empty;
+        UpdatePersonaAutomationName();
     }
 
-    private async void OnNewPersonaClicked(object sender, RoutedEventArgs e)
+    private void UpdatePersonaAutomationName()
     {
-        ResetPrimaryState();
-        await EditPersonaAsync("新建人设", null, string.Empty, false);
+        var text = PersonaCombo.SelectedItem is PersonaOption option
+            ? option.DisplayText
+            : string.Empty;
+        AutomationProperties.SetName(PersonaCombo, text);
+    }
+
+    /// <summary>默认模式下按模型名刷新人设文件名；自定义模式不覆盖用户已选。</summary>
+    private void UpdatePersonaFromModel()
+    {
+        if (IsCustomMode)
+        {
+            return;
+        }
+
+        ShowAutoPersona();
     }
 
     private async void OnEditPersonaClicked(object sender, RoutedEventArgs e)
@@ -291,71 +351,24 @@ public sealed partial class ModelPage : Page
             return;
         }
 
-        if (PersonaCombo.SelectedItem is not PersonaItem item)
+        // 默认模式（下拉禁用）没有可选条目，编辑的是当前模型对应的内置人设
+        var item = SelectedPersona;
+        if (!IsCustomMode || item is null)
         {
-            ShowResult(InfoBarSeverity.Informational, "请先选择要编辑的人设");
+            var file = Presets.InferPersona(ModelBox.Text);
+            await EditPersonaAsync(
+                Path.GetFileNameWithoutExtension(file),
+                PersonaStore.Load(_botRoot, "config/personas/" + file),
+                false);
             return;
         }
 
-        var content = PersonaStore.Load(_botRoot, item.RelativePath);
-        await EditPersonaAsync("编辑人设", item.Name, content, item.IsCustom);
+        // 内置预设（personas 根下）预填后另存 custom 副本；custom 下的直接覆盖
+        await EditPersonaAsync(item.Name, PersonaStore.Load(_botRoot, item.RelativePath), item.IsCustom);
     }
 
-    private async void OnImportPersonaClicked(object sender, RoutedEventArgs e)
-    {
-        ResetPrimaryState();
-
-        if (_botRoot is null)
-        {
-            ShowResult(InfoBarSeverity.Error, "未找到 Bot 根目录，无法导入人设");
-            return;
-        }
-
-        if (App.Main is null)
-        {
-            ShowResult(InfoBarSeverity.Error, "主窗口不可用，无法打开文件选择器");
-            return;
-        }
-
-        string? sourcePath;
-        try
-        {
-            var picker = new Windows.Storage.Pickers.FileOpenPicker
-            {
-                SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
-            };
-            picker.FileTypeFilter.Add(".txt");
-
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.Main);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-            var file = await picker.PickSingleFileAsync();
-            if (file is null)
-            {
-                return;
-            }
-
-            sourcePath = file.Path;
-        }
-        catch (Exception ex)
-        {
-            ShowResult(InfoBarSeverity.Error, "打开文件选择器失败：" + ex.Message);
-            return;
-        }
-
-        var result = PersonaStore.Import(sourcePath);
-        if (!result.Ok)
-        {
-            await ShowInfoAsync("导入失败", result.Message);
-            return;
-        }
-
-        var name = Path.GetFileNameWithoutExtension(sourcePath);
-        await EditPersonaAsync("导入人设", name, result.Content, false);
-    }
-
-    /// <summary>弹窗编辑并保存；overwrite 仅对已有的自定义人设生效。</summary>
-    private async Task EditPersonaAsync(string title, string? name, string content, bool overwrite)
+    /// <summary>打开编辑窗；Primary 表示保存。overwrite 仅对已有 custom 人设生效。</summary>
+    private async Task EditPersonaAsync(string name, string content, bool overwrite)
     {
         if (_botRoot is null)
         {
@@ -363,13 +376,12 @@ public sealed partial class ModelPage : Page
             return;
         }
 
-        var dialog = new PersonaEditorDialog(title, name, content)
+        var dialog = new PersonaEditorDialog("编辑人设", name, content)
         {
             XamlRoot = XamlRoot,
         };
 
-        var picked = await dialog.ShowAsync();
-        if (picked != ContentDialogResult.Primary)
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
         {
             return;
         }
@@ -378,12 +390,22 @@ public sealed partial class ModelPage : Page
         {
             var saved = PersonaStore.Save(_botRoot, dialog.PersonaName, dialog.PersonaContent, overwrite);
             _personas = PersonaStore.ListAll(_botRoot);
-            PersonaCombo.ItemsSource = _personas;
 
-            PersonaMode.SelectedIndex = 1;
-            ApplyPersonaMode();
-            SelectPersonaByPath(saved.RelativePath);
-            PersonaAutoBox.Text = Path.GetFileName(saved.RelativePath);
+            // 保存后切到自定义模式并选中落地文件（内置人设落地的是 custom 副本）
+            var wasLoading = _loading;
+            _loading = true;
+            try
+            {
+                PersonaMode.SelectedIndex = 1;
+                ApplyPersonaMode();
+                SelectPersonaByPath(saved.RelativePath);
+            }
+            finally
+            {
+                _loading = wasLoading;
+            }
+
+            UpdatePersonaAutomationName();
             ShowResult(InfoBarSeverity.Success, "人设已保存：" + saved.DisplayName);
         }
         catch (Exception ex)
@@ -394,28 +416,31 @@ public sealed partial class ModelPage : Page
 
     private bool SelectPersonaByPath(string? relativePath)
     {
-        if (string.IsNullOrWhiteSpace(relativePath))
+        if (string.IsNullOrWhiteSpace(relativePath)
+            || PersonaCombo.ItemsSource is not IEnumerable<PersonaOption> options)
         {
             return false;
         }
 
         var target = relativePath.Trim().Replace('\\', '/');
-        foreach (var item in _personas)
+        foreach (var option in options)
         {
-            if (string.Equals(item.RelativePath, target, StringComparison.OrdinalIgnoreCase))
+            if (option.Target is not null
+                && string.Equals(option.Target.RelativePath, target, StringComparison.OrdinalIgnoreCase))
             {
-                PersonaCombo.SelectedItem = item;
+                PersonaCombo.SelectedItem = option;
                 return true;
             }
         }
 
         // 只对不上路径时，退回按文件名匹配
         var fileName = Path.GetFileName(target);
-        foreach (var item in _personas)
+        foreach (var option in options)
         {
-            if (string.Equals(Path.GetFileName(item.RelativePath), fileName, StringComparison.OrdinalIgnoreCase))
+            if (option.Target is not null
+                && string.Equals(Path.GetFileName(option.Target.RelativePath), fileName, StringComparison.OrdinalIgnoreCase))
             {
-                PersonaCombo.SelectedItem = item;
+                PersonaCombo.SelectedItem = option;
                 return true;
             }
         }
@@ -449,14 +474,15 @@ public sealed partial class ModelPage : Page
 
         try
         {
-            var custom = PersonaMode.SelectedIndex == 1;
-            if (custom && PersonaCombo.SelectedItem is not PersonaItem)
+            var custom = IsCustomMode;
+            var picked = SelectedPersona;
+            if (custom && picked is null)
             {
-                ShowResult(InfoBarSeverity.Warning, "自定义模式还没选人设，先选一个或新建");
+                ShowResult(InfoBarSeverity.Warning, "自定义模式还没选人设，先选一个或点编辑新建");
                 return;
             }
 
-            var personaFile = custom && PersonaCombo.SelectedItem is PersonaItem item ? item.RelativePath : string.Empty;
+            var personaFile = custom && picked is not null ? picked.RelativePath : string.Empty;
             var effort = IndexToEffort(ReasonLevel.SelectedIndex);
             EnvConfig.Save(
                 root,
@@ -587,3 +613,4 @@ public sealed partial class ModelPage : Page
         };
     }
 }
+

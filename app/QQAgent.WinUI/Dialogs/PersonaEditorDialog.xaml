@@ -8,8 +8,10 @@
     mc:Ignorable="d"
     Title="人设"
     PrimaryButtonText="保存"
+    SecondaryButtonText="导入"
     CloseButtonText="取消"
-    DefaultButton="Primary">
+    DefaultButton="Primary"
+    SecondaryButtonClick="OnImportClicked">
 
     <StackPanel Width="420" Spacing="12">
         <StackPanel Spacing="6">
@@ -25,6 +27,7 @@
                 x:Name="NameBox"
                 MaxLength="20"
                 PlaceholderText="如：my_persona"
+                AutomationProperties.AutomationId="PersonaNameBox"
                 TextChanged="OnNameChanged" />
         </StackPanel>
 
@@ -35,6 +38,7 @@
                     x:Name="ContentCountText"
                     HorizontalAlignment="Right"
                     Style="{StaticResource SecondaryTextStyle}"
+                    AutomationProperties.AutomationId="PersonaContentCount"
                     Text="0/200" />
             </Grid>
             <TextBox
@@ -42,7 +46,13 @@
                 Height="180"
                 AcceptsReturn="True"
                 TextWrapping="Wrap"
+                AutomationProperties.AutomationId="PersonaContentBox"
                 TextChanged="OnContentChanged" />
         </StackPanel>
+
+        <TextBlock
+            x:Name="ImportErrorText"
+            Style="{StaticResource SecondaryTextStyle}"
+            Visibility="Collapsed" />
     </StackPanel>
 </ContentDialog>

@@ -105,7 +105,8 @@ public static class PersonaStore
     /// </summary>
     public static PersonaItem Save(string botRoot, string? name, string content, bool overwrite)
     {
-        var text = content ?? string.Empty;
+        // TextBox 的换行是 CR，统一成 LF 落盘，保证与内置人设文件的行尾一致
+        var text = (content ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
         if (text.Length > MaxContentLength)
         {
             throw new ArgumentException("内容超过 " + MaxContentLength + " 字");
