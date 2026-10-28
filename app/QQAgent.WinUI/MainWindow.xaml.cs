@@ -183,6 +183,9 @@ public sealed partial class MainWindow : Window
 
     private void SetupBackdrop()
     {
+        // 根 Grid 保持透明：Mica / Acrylic 生效时直接透出系统材质，不铺任何实色底板。
+        RootGrid.Background = new SolidColorBrush(Colors.Transparent);
+
         try
         {
             var build = Environment.OSVersion.Version.Build;
@@ -205,17 +208,18 @@ public sealed partial class MainWindow : Window
             Debug.WriteLine(ex.ToString());
         }
 
+        // Mica / Acrylic 都不可用时才铺纯色兜底，保证可读性。
         SystemBackdrop = null;
         try
         {
-            if (Application.Current.Resources["PageFallbackBackgroundStyle"] is Style fallback)
+            if (Application.Current.Resources["ApplicationPageBackgroundThemeBrush"] is Brush fallback)
             {
-                RootGrid.Style = fallback;
+                RootGrid.Background = fallback;
             }
         }
         catch (Exception)
         {
-            // 兜底样式也拿不到时保持透明，至少能正常使用
+            // 兜底色也拿不到时保持透明，至少能正常使用
         }
     }
 

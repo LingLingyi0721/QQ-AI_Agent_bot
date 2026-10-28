@@ -35,10 +35,8 @@
     <SolidColorBrush x:Key="SuccessBrush" Color="#6CCB5F" />
     <SolidColorBrush x:Key="DangerBrush" Color="#FF6B6B" />
 
-    <!-- 注入到 Window 根 Grid 的兜底背景：Mica / Acrylic 都不可用时才使用 -->
-    <Style x:Key="PageFallbackBackgroundStyle" TargetType="Grid">
-        <Setter Property="Background" Value="{ThemeResource ApplicationPageBackgroundThemeBrush}" />
-    </Style>
+    <!-- 这里不再提供任何全局 Page/Grid 背景 Setter：窗口内容层一律透明，让 Mica/Acrylic 透出。
+         Mica/Acrylic 都不可用时的纯色兜底由 MainWindow.SetupBackdrop() 直接给 RootGrid 赋值。 -->
 
 </ResourceDictionary>
 
