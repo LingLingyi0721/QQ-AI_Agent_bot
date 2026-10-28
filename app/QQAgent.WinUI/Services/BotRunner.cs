@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
@@ -6,7 +6,7 @@ using System.Text;
 namespace QQAgent.WinUI.Services;
 
 /// <summary>
-/// Bot 进程的唯一管理者：启动 / 停止 / 采集 stdout+stderr / 保留最近日志。
+/// Bot 进程的唯一管理者：启动 / 停止 / 采集 stdout+stderr / 保留最近日志与最近报错。
 /// 事件一律在触发方线程直接抛出，由订阅方自行切回 UI 线程。
 /// </summary>
 public sealed class BotRunner
@@ -14,10 +14,16 @@ public sealed class BotRunner
     /// <summary>日志保留上限（超出丢弃最旧）。</summary>
     public const int MaxRecentLines = 3000;
 
+    /// <summary>报错保留上限（超出丢弃最旧）。</summary>
+    public const int MaxRecentErrors = 200;
+
     private static readonly Lazy<BotRunner> LazyInstance = new(() => new BotRunner());
 
     private readonly object _gate = new();
     private readonly Queue<(string Text, bool IsErr)> _recent = new();
+
+    /// <summary>报错环形缓冲：stderr 行 + 系统级错误（非 0 退出码、缺 python、缺项目目录等）。</summary>
+    private readonly Queue<(DateTime Time, string Text)> _errors = new();
 
     private Process? _process;
     private bool _running;
@@ -35,6 +41,9 @@ public sealed class BotRunner
 
     /// <summary>运行状态变化（是否运行、PID）。</summary>
     public event Action<bool, int?>? StateChanged;
+
+    /// <summary>有新错误入列 / 报错被清空时抛出（无参数，订阅方自行读 RecentErrors）。</summary>
+    public event Action? ErrorsChanged;
 
     public bool IsRunning
     {
@@ -93,13 +102,25 @@ public sealed class BotRunner
             }
         }
     }
-    /// <summary>启动 python -m src.main。返回 (是否成功, 说明)。</summary>
+
+    /// <summary>最近报错快照（最多 MaxRecentErrors 条，最旧在前）。</summary>
+    public IReadOnlyList<(DateTime Time, string Text)> RecentErrors
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _errors.ToArray();
+            }
+        }
+    }    /// <summary>启动 python -m src.main。返回 (是否成功, 说明)。</summary>
     public (bool Ok, string Message) Start()
     {
         var root = App.BotRoot ?? EnvConfig.FindBotRoot();
         if (string.IsNullOrWhiteSpace(root))
         {
-            return (false, "未找到 bot 项目根目录");
+            AddError("未找到 bot 项目目录");
+            return (false, "未找到 bot 项目目录");
         }
 
         lock (_gate)
@@ -109,9 +130,9 @@ public sealed class BotRunner
                 return (false, "已在运行");
             }
         }
-
         if (!IsPythonAvailable())
         {
+            AddError("未找到 python");
             return (false, "未找到 python");
         }
 
@@ -130,8 +151,7 @@ public sealed class BotRunner
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
         psi.Environment["PYTHONUNBUFFERED"] = "1";
 
-        var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        process.OutputDataReceived += (_, e) =>
+        var process = new Process { StartInfo = psi, EnableRaisingEvents = true };        process.OutputDataReceived += (_, e) =>
         {
             if (e.Data is not null)
             {
@@ -148,15 +168,19 @@ public sealed class BotRunner
         process.Exited += OnProcessExited;
         try
         {
-            if (!process.Start())
+            var started = process.Start();
+
+            if (!started)
             {
                 process.Dispose();
+                AddError("python 进程启动失败");
                 return (false, "python 进程启动失败");
             }
         }
         catch (Exception ex)
         {
             process.Dispose();
+            AddError("启动失败：" + ex.Message);
             return (false, "启动失败：" + ex.Message);
         }
         var pid = 0;
@@ -208,7 +232,6 @@ public sealed class BotRunner
         {
             return false;
         }
-
         try
         {
             process.Kill(entireProcessTree: true);
@@ -236,6 +259,33 @@ public sealed class BotRunner
             _recent.Clear();
         }
     }
+
+    /// <summary>清空报错缓存（不影响进程）。</summary>
+    public void ClearErrors()
+    {
+        lock (_gate)
+        {
+            _errors.Clear();
+        }
+
+        ErrorsChanged?.Invoke();
+    }
+
+    /// <summary>把一条错误写入环形缓冲（stderr 行与系统级错误共用）。</summary>
+    private void AddError(string text)
+    {
+        lock (_gate)
+        {
+            _errors.Enqueue((DateTime.Now, text));
+            while (_errors.Count > MaxRecentErrors)
+            {
+                _errors.Dequeue();
+            }
+        }
+
+        ErrorsChanged?.Invoke();
+    }
+
     private void OnProcessExited(object? sender, EventArgs e)
     {
         var code = -1;
@@ -262,7 +312,6 @@ public sealed class BotRunner
 
             p.Dispose();
         }
-
         lock (_gate)
         {
             _process = null;
@@ -273,8 +322,14 @@ public sealed class BotRunner
         }
 
         Publish("[系统] bot 进程已退出，退出码 " + code, false);
+        if (code != 0)
+        {
+            AddError("[系统] bot 进程已退出，退出码 " + code);
+        }
+
         StateChanged?.Invoke(false, null);
     }
+
     private void Publish(string text, bool isErr)
     {
         lock (_gate)
@@ -286,6 +341,11 @@ public sealed class BotRunner
             }
         }
 
+        if (isErr)
+        {
+            AddError(text);
+        }
+
         LogReceived?.Invoke(text, isErr);
     }
     /// <summary>python --version 预检，3 秒超时。</summary>
@@ -294,7 +354,7 @@ public sealed class BotRunner
         Process? probe = null;
         try
         {
-            probe = Process.Start(new ProcessStartInfo
+            var startInfo = new ProcessStartInfo
             {
                 FileName = "python",
                 Arguments = "--version",
@@ -304,8 +364,9 @@ public sealed class BotRunner
                 RedirectStandardError = true,
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
-            });
+            };
 
+            probe = Process.Start(startInfo);
             if (probe is null)
             {
                 return false;

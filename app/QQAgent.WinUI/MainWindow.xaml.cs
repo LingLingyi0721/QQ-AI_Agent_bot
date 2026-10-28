@@ -1,4 +1,4 @@
-﻿﻿using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -42,8 +42,8 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<string, Type> _pages = new(StringComparer.OrdinalIgnoreCase)
     {
         ["model"] = typeof(ModelPage),
-        ["runtime"] = typeof(RuntimePage),
-        ["logs"] = typeof(LogsPage),
+        ["runtimelog"] = typeof(RuntimeLogPage),
+        ["errors"] = typeof(ErrorsPage),
     };
 
     private readonly List<Button> _navButtons = new();
@@ -302,7 +302,7 @@ public sealed partial class MainWindow : Window
         _navButtons.Clear();
         _navTexts.Clear();
 
-        foreach (var button in new[] { ModelNav, RuntimeNav, LogsNav, SettingsNav })
+        foreach (var button in new[] { ModelNav, RuntimeLogNav, ErrorsNav, SettingsNav })
         {
             _navButtons.Add(button);
             button.Click += NavButton_Click;
@@ -310,7 +310,7 @@ public sealed partial class MainWindow : Window
             button.PointerExited += NavButton_PointerExited;
         }
 
-        foreach (var text in new[] { ModelText, RuntimeText, LogsText, SettingsText })
+        foreach (var text in new[] { ModelText, RuntimeLogText, ErrorsText, SettingsText })
         {
             _navTexts.Add(text);
             text.Opacity = 0;
@@ -451,15 +451,20 @@ public sealed partial class MainWindow : Window
 
         SetSelected(button);
 
-        if (string.Equals(tag, "settings", StringComparison.OrdinalIgnoreCase))
+        switch (tag.ToLowerInvariant())
         {
-            NavigateTo(typeof(SettingsPage));
-            return;
-        }
-
-        if (_pages.TryGetValue(tag, out var pageType))
-        {
-            NavigateTo(pageType);
+            case "model":
+                NavigateTo(typeof(ModelPage));
+                break;
+            case "runtimelog":
+                NavigateTo(typeof(RuntimeLogPage));
+                break;
+            case "errors":
+                NavigateTo(typeof(ErrorsPage));
+                break;
+            case "settings":
+                NavigateTo(typeof(SettingsPage));
+                break;
         }
     }
 

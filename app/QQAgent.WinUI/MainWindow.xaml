@@ -105,10 +105,10 @@
                         </Grid>
                     </Button>
 
-                    <Button x:Name="RuntimeNav" Tag="runtime" Style="{StaticResource NavButtonStyle}"
+                    <Button x:Name="RuntimeLogNav" Tag="runtimelog" Style="{StaticResource NavButtonStyle}"
                             Click="NavButton_Click"
-                            AutomationProperties.AutomationId="NavRuntime"
-                            AutomationProperties.Name="运行控制">
+                            AutomationProperties.AutomationId="NavRuntimeLog"
+                            AutomationProperties.Name="运行与日志">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="40" />
@@ -117,7 +117,7 @@
                             <FontIcon Grid.Column="0" Glyph="&#xE768;" FontSize="16"
                                       HorizontalAlignment="Center" VerticalAlignment="Center"
                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock x:Name="RuntimeText" Grid.Column="1" Text="运行控制"
+                            <TextBlock x:Name="RuntimeLogText" Grid.Column="1" Text="运行与日志"
                                        FontSize="14" VerticalAlignment="Center"
                                        Opacity="0" Visibility="Collapsed" TextTrimming="CharacterEllipsis" />
                             <Border Tag="indicator" Width="3" Height="18" CornerRadius="1.5"
@@ -129,20 +129,19 @@
                             </Border>
                         </Grid>
                     </Button>
-
-                    <Button x:Name="LogsNav" Tag="logs" Style="{StaticResource NavButtonStyle}"
+                    <Button x:Name="ErrorsNav" Tag="errors" Style="{StaticResource NavButtonStyle}"
                             Click="NavButton_Click"
-                            AutomationProperties.AutomationId="NavLogs"
-                            AutomationProperties.Name="日志">
+                            AutomationProperties.AutomationId="NavErrors"
+                            AutomationProperties.Name="最近的报错">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="40" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <FontIcon Grid.Column="0" Glyph="&#xE7C3;" FontSize="16"
+                            <FontIcon Grid.Column="0" Glyph="&#xE7BA;" FontSize="16"
                                       HorizontalAlignment="Center" VerticalAlignment="Center"
                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock x:Name="LogsText" Grid.Column="1" Text="日志"
+                            <TextBlock x:Name="ErrorsText" Grid.Column="1" Text="最近的报错"
                                        FontSize="14" VerticalAlignment="Center"
                                        Opacity="0" Visibility="Collapsed" TextTrimming="CharacterEllipsis" />
                             <Border Tag="indicator" Width="3" Height="18" CornerRadius="1.5"
