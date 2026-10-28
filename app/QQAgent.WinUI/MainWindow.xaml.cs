@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using QQAgent.WinUI.Pages;
 using QQAgent.WinUI.Services;
 using Windows.Graphics;
@@ -51,9 +52,30 @@ public sealed partial class MainWindow : Window
 
     private const int NavItemCollapseGuardMs = 600;
 
+    /// <summary>展开动画时长（ms）。</summary>
+    private const int PaneOpenDurationMs = 180;
+
+    /// <summary>收起动画时长（ms）。</summary>
+    private const int PaneCollapseDurationMs = 140;
+
+    /// <summary>收起动画的右移终点（逻辑 px）。</summary>
+    private const double PaneCollapseExitOffset = 150;
+
     /// <summary>防止设置 PaneDisplayMode 时重入 IsPaneOpen 回调。</summary>
 
     private bool _syncingPaneDisplayMode;
+
+    /// <summary>侧栏过渡动画（每次播放重建，连点时先停旧的）。</summary>
+    private Storyboard? _paneStoryboard;
+
+    /// <summary>动画进行中标记；Completed 后复位，配合版本号防止旧回调改错模式。</summary>
+    private bool _paneAnimating;
+
+    /// <summary>当前动画的目标方向（true = 展开），用于忽略同向重复触发。</summary>
+    private bool _paneAnimTargetOpen;
+
+    /// <summary>动画版本号：连点时递增，旧 Storyboard 的 Completed 直接作废。</summary>
+    private int _paneAnimVersion;
 
     /// <summary>IsPaneOpen 属性变化的回调令牌，窗口关闭时注销。</summary>
 
@@ -85,6 +107,21 @@ public sealed partial class MainWindow : Window
         SyncTitleBarTheme();
     }
 
+    /// <summary>当前侧栏是否展开（自检/自动化用）。</summary>
+    public bool IsPaneOpenNow => NavView.IsPaneOpen;
+
+    /// <summary>当前侧栏水平位移（自检/自动化用，动画中间态采样）。</summary>
+    public double PaneTranslateX => PaneTransform.TranslateX;
+
+    /// <summary>当前侧栏整体透明度（自检/自动化用）。</summary>
+    public double PaneOpacity => NavView.Opacity;
+
+    /// <summary>自检用：主动展开侧栏（走与点汉堡相同的 IsPaneOpen 回调）。</summary>
+    public void OpenPaneForTest()
+    {
+        NavView.IsPaneOpen = true;
+    }
+
     private void OnWindowActivated(object sender, WindowActivatedEventArgs args)
     {
         if (_initialized)
@@ -113,6 +150,8 @@ public sealed partial class MainWindow : Window
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        StopPaneAnimation();
+
         NavView.ItemInvoked -= OnNavItemInvoked;
         NavView.Loaded -= OnNavViewLoaded;
         NavView.PaneClosing -= OnNavPaneClosing;
@@ -291,6 +330,7 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// 展开态切到 Left（Left 模式下点导航项不会自动收起，对齐任务管理器），
     /// 收起态切回 LeftCompact（保留 60px 图标栏）。仅改显示模式，不直接改 IsPaneOpen。
+    /// 模式切换本身是瞬间的布局变化，视觉过渡由 PlayPaneAnimation 的合成动画补上。
     /// </summary>
     private void OnIsPaneOpenPropertyChanged(DependencyObject sender, DependencyProperty dp)
     {
@@ -299,11 +339,39 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var target = NavView.IsPaneOpen
-            ? NavigationViewPaneDisplayMode.Left
-            : NavigationViewPaneDisplayMode.LeftCompact;
+        if (NavView.IsPaneOpen)
+        {
+            // 动画已经在往展开方向跑就忽略重复请求，避免自己和自己抢
+            if (_paneAnimating && _paneAnimTargetOpen)
+            {
+                return;
+            }
 
-        if (NavView.PaneDisplayMode == target)
+            SwitchPaneDisplayMode(NavigationViewPaneDisplayMode.Left);
+            PlayPaneAnimation(open: true);
+            return;
+        }
+
+        if (NavView.PaneDisplayMode == NavigationViewPaneDisplayMode.Left)
+        {
+            // 收起动画期间保持 Left 模式，等动画结束后再切回紧凑模式
+            if (_paneAnimating && !_paneAnimTargetOpen)
+            {
+                return;
+            }
+
+            PlayPaneAnimation(open: false);
+            return;
+        }
+
+        StopPaneAnimation();
+        ResetPaneVisual();
+    }
+
+    /// <summary>切换侧栏显示模式；切换期间屏蔽 IsPaneOpen 回调，避免重入。</summary>
+    private void SwitchPaneDisplayMode(NavigationViewPaneDisplayMode mode)
+    {
+        if (NavView.PaneDisplayMode == mode)
         {
             return;
         }
@@ -311,12 +379,128 @@ public sealed partial class MainWindow : Window
         _syncingPaneDisplayMode = true;
         try
         {
-            NavView.PaneDisplayMode = target;
+            NavView.PaneDisplayMode = mode;
+            NavView.UpdateLayout();
         }
         finally
         {
             _syncingPaneDisplayMode = false;
         }
+    }
+
+    /// <summary>
+    /// 展开/收起过渡动画：只动合成属性（RenderTransform.TranslateX + Opacity），不触发布局动画。
+    /// 展开 180ms EaseOut：-162 → 0，Opacity 0.35 → 1；
+    /// 收起 140ms EaseIn：0 → +150，Opacity 1 → 0，完成后才切回 LeftCompact 并复位。
+    /// </summary>
+    private void PlayPaneAnimation(bool open)
+    {
+        _paneAnimVersion++;
+        var version = _paneAnimVersion;
+        StopPaneAnimation();
+
+        _paneAnimating = true;
+        _paneAnimTargetOpen = open;
+
+        try
+        {
+            var durationMs = open ? PaneOpenDurationMs : PaneCollapseDurationMs;
+            var fromX = open ? -(NavView.OpenPaneLength - NavView.CompactPaneLength) : 0d;
+            var toX = open ? 0d : PaneCollapseExitOffset;
+            var fromOpacity = open ? 0.35 : 1d;
+            var toOpacity = open ? 1d : 0d;
+
+            // 先落到起始帧，避免 Begin 之前闪一帧终态
+            PaneTransform.TranslateY = 0;
+            PaneTransform.TranslateX = fromX;
+            NavView.Opacity = fromOpacity;
+
+            var storyboard = new Storyboard();
+            var easing = new CubicEase { EasingMode = open ? EasingMode.EaseOut : EasingMode.EaseIn };
+
+            var move = new DoubleAnimation
+            {
+                From = fromX,
+                To = toX,
+                Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+                EasingFunction = easing,
+            };
+            Storyboard.SetTarget(move, NavView);
+            Storyboard.SetTargetProperty(move, "(UIElement.RenderTransform).(CompositeTransform.TranslateX)");
+            storyboard.Children.Add(move);
+
+            var fade = new DoubleAnimation
+            {
+                From = fromOpacity,
+                To = toOpacity,
+                Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+                EasingFunction = easing,
+            };
+            Storyboard.SetTarget(fade, NavView);
+            Storyboard.SetTargetProperty(fade, "Opacity");
+            storyboard.Children.Add(fade);
+
+            storyboard.Completed += (_, _) =>
+            {
+                if (version != _paneAnimVersion)
+                {
+                    return;
+                }
+
+                _paneAnimating = false;
+
+                if (!open)
+                {
+                    // 已经淡到全透明，此时切模式用户看不到宽度跳变
+                    SwitchPaneDisplayMode(NavigationViewPaneDisplayMode.LeftCompact);
+                }
+
+                ResetPaneVisual();
+            };
+
+            _paneStoryboard = storyboard;
+            storyboard.Begin();
+        }
+        catch (Exception ex)
+        {
+            // 动画失败不影响功能：直接落到目标态
+            Debug.WriteLine(ex.ToString());
+            _paneAnimating = false;
+            if (!open)
+            {
+                SwitchPaneDisplayMode(NavigationViewPaneDisplayMode.LeftCompact);
+            }
+
+            ResetPaneVisual();
+        }
+    }
+
+    /// <summary>停掉正在跑的侧栏动画（连点时先停旧的再起新的）。</summary>
+    private void StopPaneAnimation()
+    {
+        if (_paneStoryboard is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _paneStoryboard.Stop();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex.ToString());
+        }
+
+        _paneStoryboard = null;
+    }
+
+    /// <summary>把动画留下的偏移与透明度复位，避免影响后续布局/截图。</summary>
+    private void ResetPaneVisual()
+    {
+        PaneTransform.TranslateX = 0;
+        PaneTransform.TranslateY = 0;
+        NavView.Opacity = 1;
     }
 
     /// <summary>

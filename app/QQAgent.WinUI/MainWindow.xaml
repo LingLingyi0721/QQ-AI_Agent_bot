@@ -36,6 +36,18 @@
             IsBackButtonVisible="Collapsed"
             Background="Transparent">
 
+            <!-- 侧栏（pane）背景透明：WinUI 3 1.8 实际可用的键只有 Default / Expanded / TopPane，
+                 MinimalPaneBackground 在本版本 .pri 中不存在，故不覆盖。 -->
+            <NavigationView.Resources>
+                <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="Transparent" />
+                <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="Transparent" />
+                <SolidColorBrush x:Key="NavigationViewTopPaneBackground" Color="Transparent" />
+            </NavigationView.Resources>
+
+            <NavigationView.RenderTransform>
+                <CompositeTransform x:Name="PaneTransform" />
+            </NavigationView.RenderTransform>
+
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Name="ModelNavItem" Content="模型配置" Tag="model">
                     <NavigationViewItem.Icon>
