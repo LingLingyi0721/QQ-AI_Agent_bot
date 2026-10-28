@@ -97,6 +97,7 @@ async def run() -> int:
         temperature=llm_cfg.get("temperature", 0.7),
         max_tokens=llm_cfg.get("max_tokens", 1024),
         timeout=llm_cfg.get("timeout", 60),
+        reasoning_effort=llm_cfg.get("reasoning_effort", ""),
     )
 
     onebot_cfg = cfg["onebot"]
