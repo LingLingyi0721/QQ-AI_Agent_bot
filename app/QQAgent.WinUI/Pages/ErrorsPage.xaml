@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:QQAgent.WinUI.Models"
     mc:Ignorable="d"
     Background="Transparent">
 
@@ -29,23 +30,62 @@
 
         <InfoBar x:Name="NoticeBar" Grid.Row="2" IsOpen="False" IsClosable="True" Margin="0,0,0,8" />
 
-        <Border Grid.Row="3" Background="#1E1E1E" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="8">
-            <Grid>
-                <ScrollViewer x:Name="ErrorScroller"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Auto"
-                              Padding="12,10">
-                    <StackPanel x:Name="ErrorList" Spacing="2" />
-                </ScrollViewer>
+        <!-- 条目式列表：每条报错一个独立卡片，最新的在最上面。 -->
+        <Grid Grid.Row="3">
+            <ListView x:Name="ErrorList"
+                      SelectionMode="None"
+                      IsItemClickEnabled="False"
+                      Background="Transparent"
+                      Padding="0,0,4,0"
+                      AutomationProperties.AutomationId="ErrorList"
+                      AutomationProperties.Name="报错列表">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0" />
+                        <Setter Property="MinHeight" Value="0" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="VerticalContentAlignment" Value="Top" />
+                    </Style>
+                </ListView.ItemContainerStyle>
 
-                <TextBlock x:Name="EmptyText"
-                           Text="暂无报错"
-                           FontSize="12"
-                           Foreground="#9A9A9A"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           AutomationProperties.AutomationId="EmptyErrorsText" />
-            </Grid>
-        </Border>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="models:ErrorItem">
+                        <Border Margin="0,0,0,6"
+                                Padding="12,10"
+                                CornerRadius="6"
+                                Background="#FFFFFF"
+                                BorderBrush="#F0D5D5"
+                                BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{x:Bind TimeText}"
+                                           FontFamily="Consolas"
+                                           FontSize="12"
+                                           Foreground="#8A8A8A"
+                                           Margin="0,0,12,0" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{x:Bind Message}"
+                                           TextWrapping="Wrap"
+                                           FontSize="13"
+                                           Foreground="#C42B1C" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <TextBlock x:Name="EmptyText"
+                       Text="暂无报错"
+                       FontSize="12"
+                       Foreground="#9A9A9A"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       AutomationProperties.AutomationId="EmptyErrorsText" />
+        </Grid>
     </Grid>
 </Page>

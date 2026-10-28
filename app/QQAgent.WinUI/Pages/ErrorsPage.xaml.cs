@@ -4,16 +4,16 @@ using System.Linq;
 using System.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
+using QQAgent.WinUI.Models;
 using QQAgent.WinUI.Services;
 using Windows.ApplicationModel.DataTransfer;
-using Windows.UI;
 
 namespace QQAgent.WinUI.Pages;
 
 public sealed partial class ErrorsPage : Page
 {
-    private static readonly SolidColorBrush ErrorBrush = new(Color.FromArgb(255, 0xFF, 0x8A, 0x8A));
+    /// <summary>列表展示上限（与 BotRunner.MaxRecentErrors 一致）。</summary>
+    private const int MaxItems = 200;
 
     private bool _subscribed;
 
@@ -52,35 +52,17 @@ public sealed partial class ErrorsPage : Page
 
     private void Rebuild()
     {
-        var errors = BotRunner.Current.RecentErrors;
+        // RecentErrors 是旧在前，列表要新在最上面，故反转后再取上限。
+        var items = BotRunner.Current.RecentErrors
+            .Reverse()
+            .Take(MaxItems)
+            .Select(item => new ErrorItem { Time = item.Time, Message = item.Text })
+            .ToList();
 
-        ErrorList.Children.Clear();
-        foreach (var item in errors)
-        {
-            ErrorList.Children.Add(new TextBlock
-            {
-                Text = "[" + item.Time.ToString("HH:mm:ss") + "] " + item.Text,
-                FontFamily = new FontFamily("Consolas"),
-                FontSize = 12,
-                Foreground = ErrorBrush,
-                TextWrapping = TextWrapping.NoWrap,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                IsTextSelectionEnabled = true,
-            });
-        }
+        ErrorList.ItemsSource = items;
 
-        var empty = errors.Count == 0;
-        EmptyText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-        ErrorScroller.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
-
-        if (!empty)
-        {
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                ErrorScroller.UpdateLayout();
-                ErrorScroller.ChangeView(null, ErrorScroller.ScrollableHeight, null, true);
-            });
-        }
+        // 列表始终保持可见（空表只显示居中提示），避免 Collapsed 让 UIA 树里查不到 ListView。
+        EmptyText.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnRefreshClicked(object sender, RoutedEventArgs e)
@@ -92,6 +74,7 @@ public sealed partial class ErrorsPage : Page
     private void OnClearClicked(object sender, RoutedEventArgs e)
     {
         BotRunner.Current.ClearErrors();
+        ErrorList.ItemsSource = null;
         Rebuild();
         ShowNotice(InfoBarSeverity.Informational, "已清空报错");
     }

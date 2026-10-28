@@ -127,6 +127,18 @@ public sealed partial class MainWindow : Window
         AnimateSideBar();
     }
 
+    /// <summary>截图自检用：按任务标签切页（model / runtimelog / errors / settings）。</summary>
+    public void NavigateForTest(string tag)
+    {
+        var button = _navButtons.FirstOrDefault(b => string.Equals(b.Tag as string, tag, StringComparison.OrdinalIgnoreCase));
+        if (button is null)
+        {
+            return;
+        }
+
+        NavButton_Click(button, new RoutedEventArgs());
+    }
+
     private void OnWindowActivated(object sender, WindowActivatedEventArgs args)
     {
         if (_initialized)

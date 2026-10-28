@@ -21,6 +21,9 @@ public partial class App : Application
     private DispatcherTimer? _selfTestTimer;
     private string? _screenshotPath;
 
+    /// <summary>截图前先切页（自检用，参数 --nav &lt;标签&gt;）。</summary>
+    private string? _screenshotNav;
+
     public static AppSettings Settings { get; private set; } = new();
 
     public static string? BotRoot { get; private set; }
@@ -45,6 +48,7 @@ public partial class App : Application
 
         _selfTest = argv.Any(a => string.Equals(a, "--selftest", StringComparison.OrdinalIgnoreCase));
         _screenshotPath = GetOptionValue(argv, "--screenshot");
+        _screenshotNav = GetOptionValue(argv, "--nav");
 
         Main = new MainWindow();
         _window = Main;
@@ -89,6 +93,12 @@ public partial class App : Application
         try
         {
             await Task.Delay(800);
+
+            if (!string.IsNullOrWhiteSpace(_screenshotNav))
+            {
+                Main?.NavigateForTest(_screenshotNav);
+                await Task.Delay(600);
+            }
 
             if (_window?.Content is not UIElement root)
             {

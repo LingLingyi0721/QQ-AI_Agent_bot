@@ -64,7 +64,14 @@
             <Button Content="另存为…" Click="OnSaveAsClicked" AutomationProperties.AutomationId="SaveLogButton" />
         </StackPanel>
 
-        <Border Grid.Row="4" Background="#1E1E1E" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="8">
+        <!-- 日志窗口：固定白底黑字，不随主题切换（浅色日志窗口在深色主题下同样保持白底）。 -->
+        <Border Grid.Row="4"
+                Background="#FFFFFF"
+                BorderBrush="#E1E1E1"
+                BorderThickness="1"
+                CornerRadius="6"
+                AutomationProperties.AutomationId="LogContainer"
+                AutomationProperties.Name="日志窗口">
             <ScrollViewer x:Name="LogScroller"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Auto"
@@ -73,9 +80,10 @@
                                FontFamily="Consolas"
                                FontSize="12"
                                LineHeight="18"
-                               Foreground="#E6E6E6"
+                               Foreground="#1F1F1F"
                                TextWrapping="NoWrap"
-                               IsTextSelectionEnabled="True" />
+                               IsTextSelectionEnabled="True"
+                               AutomationProperties.AutomationId="LogText" />
             </ScrollViewer>
         </Border>
     </Grid>

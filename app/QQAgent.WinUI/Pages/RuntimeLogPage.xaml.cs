@@ -21,16 +21,23 @@ public sealed partial class RuntimeLogPage : Page
 {
     private const int MaxLines = 3000;
 
+    /// <summary>BotRunner 推送的系统消息前缀（进程退出等），显示为蓝色。</summary>
+    private const string SystemPrefix = "[系统]";
+
     private static readonly Color IdleColor = Color.FromArgb(255, 0x9A, 0x9A, 0x9A);
     private static readonly Color RunningColor = Color.FromArgb(255, 0x6C, 0xCB, 0x5F);
     private static readonly Color FailedColor = Color.FromArgb(255, 0xFF, 0x6B, 0x6B);
 
-    private readonly List<(string Text, bool IsErr)> _entries = new();
+    private readonly List<(string Stamp, string Text, bool IsErr)> _entries = new();
     private readonly SolidColorBrush _idleBrush = new(IdleColor);
     private readonly SolidColorBrush _runningBrush = new(RunningColor);
     private readonly SolidColorBrush _failedBrush = new(FailedColor);
-    private readonly SolidColorBrush _normalBrush = new(Color.FromArgb(255, 0xE6, 0xE6, 0xE6));
-    private readonly SolidColorBrush _errorBrush = new(Color.FromArgb(255, 0xFF, 0x8A, 0x8A));
+
+    // 日志窗口固定白底，故文字色也固定，不随主题变化。
+    private readonly SolidColorBrush _normalBrush = new(Color.FromArgb(255, 0x1F, 0x1F, 0x1F));
+    private readonly SolidColorBrush _errorBrush = new(Color.FromArgb(255, 0xC4, 0x2B, 0x1C));
+    private readonly SolidColorBrush _systemBrush = new(Color.FromArgb(255, 0x0F, 0x6C, 0xBD));
+    private readonly SolidColorBrush _stampBrush = new(Color.FromArgb(255, 0x8A, 0x8A, 0x8A));
 
     private bool _subscribed;
 
@@ -135,10 +142,11 @@ public sealed partial class RuntimeLogPage : Page
 
     // ---- 日志 ----
 
-    /// <summary>BotRunner 在后台线程抛日志，这里切回 UI 线程追加。</summary>
+    /// <summary>BotRunner 在后台线程抛日志，这里切回 UI 线程追加（时间戳在此处生成）。</summary>
     private void OnLogReceived(string text, bool isErr)
     {
-        DispatcherQueue.TryEnqueue(() => AppendLine(text, isErr));
+        var stamp = DateTime.Now.ToString("HH:mm:ss");
+        DispatcherQueue.TryEnqueue(() => AppendLine(stamp, text, isErr));
     }
 
     /// <summary>用 BotRunner 的缓存重建全部视图（每次进入页面都以缓存为准）。</summary>
@@ -147,46 +155,54 @@ public sealed partial class RuntimeLogPage : Page
         _entries.Clear();
         LogText.Blocks.Clear();
 
+        // BotRunner 缓存不带时间戳（不改其签名），重建时用占位符，避免伪造接收时间。
         foreach (var line in BotRunner.Current.Recent)
         {
-            AppendCore(line.Text, line.IsErr);
+            AppendCore("--:--:--", line.Text, line.IsErr);
         }
 
         ScrollToEnd();
     }
 
-    private void AppendLine(string text, bool isErr)
+    private void AppendLine(string stamp, string text, bool isErr)
     {
-        AppendCore(text, isErr);
+        AppendCore(stamp, text, isErr);
         if (AutoScrollToggle.IsOn)
         {
             ScrollToEnd();
         }
     }
 
-    private void AppendCore(string text, bool isErr)
+    private void AppendCore(string stamp, string text, bool isErr)
     {
-        _entries.Add((text, isErr));
+        _entries.Add((stamp, text, isErr));
         while (_entries.Count > MaxLines)
         {
             _entries.RemoveAt(0);
         }
 
-        LogText.Blocks.Add(CreateBlock(text, isErr));
+        LogText.Blocks.Add(CreateBlock(stamp, text, isErr));
         while (LogText.Blocks.Count > MaxLines)
         {
             LogText.Blocks.RemoveAt(0);
         }
     }
 
-    /// <summary>stderr 行单独染红，其余保持 #E6E6E6。</summary>
-    private Paragraph CreateBlock(string text, bool isErr)
+    /// <summary>灰时间戳 + 正文着色：stderr 红、系统消息蓝、其余黑。</summary>
+    private Paragraph CreateBlock(string stamp, string text, bool isErr)
     {
         var paragraph = new Paragraph { Margin = new Thickness(0) };
         paragraph.Inlines.Add(new Run
         {
+            Text = "[" + stamp + "] ",
+            Foreground = _stampBrush,
+        });
+        paragraph.Inlines.Add(new Run
+        {
             Text = string.IsNullOrEmpty(text) ? " " : text,
-            Foreground = isErr ? _errorBrush : _normalBrush,
+            Foreground = isErr
+                ? _errorBrush
+                : (text.StartsWith(SystemPrefix, StringComparison.Ordinal) ? _systemBrush : _normalBrush),
         });
         return paragraph;
     }
