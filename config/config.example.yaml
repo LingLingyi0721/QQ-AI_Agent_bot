@@ -13,6 +13,8 @@ llm:
   history_ttl_minutes: 60
   # 人设：显式指定优先，留空则按 model 名匹配 persona_map（小写包含匹配，长关键字优先）
   system_prompt_file: ""
+  persona_mode: auto        # auto=按模型自动匹配；custom=用 persona_file
+  persona_file: ""
   persona_dir: config/personas
   # 社区二创风格人格，非官方设定
   persona_map:

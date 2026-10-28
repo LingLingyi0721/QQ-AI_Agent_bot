@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Window
     x:Class="QQAgent.WinUI.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -24,12 +24,15 @@
             <Border x:Name="TitleBarRightSpacer" Grid.Column="2" Width="140" />
         </Grid>
 
+        <!-- 紧凑模式起步：收起只显示图标，悬停 350ms 展开，点击导航项后常驻展开 -->
         <NavigationView
             x:Name="NavView"
             Grid.Row="1"
-            PaneDisplayMode="Left"
+            PaneDisplayMode="LeftCompact"
+            IsPaneOpen="False"
             OpenPaneLength="210"
-            IsSettingsVisible="False"
+            CompactPaneLength="48"
+            IsSettingsVisible="True"
             IsBackButtonVisible="Collapsed"
             Background="Transparent">
 

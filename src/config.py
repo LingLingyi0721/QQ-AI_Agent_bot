@@ -32,6 +32,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "history_turns": 8,
         "history_ttl_minutes": 60,
         "system_prompt_file": "",
+        "persona_mode": "auto",
+        "persona_file": "",
         "persona_dir": "config/personas",
         "persona_map": {
             "deepseek": "deepseek.txt",
@@ -131,6 +133,15 @@ def load_config(config_path: str | Path | None = None) -> dict[str, Any]:
     else:
         cfg["llm"]["api_key"] = cfg["llm"].get("api_key", "")
 
+    if env.get("LLM_PERSONA_MODE"):
+        cfg["llm"]["persona_mode"] = env["LLM_PERSONA_MODE"]
+    if env.get("LLM_PERSONA_FILE"):
+        cfg["llm"]["persona_file"] = env["LLM_PERSONA_FILE"]
+
+    # 二选一：auto 一律按模型名自动匹配，忽略可能残留的 persona_file
+    if str(cfg["llm"].get("persona_mode") or "auto").strip().lower() == "auto":
+        cfg["llm"]["persona_file"] = ""
+
     cfg["llm"].setdefault("model", "deepseek-chat")
     cfg["llm"].setdefault("base_url", "https://api.deepseek.com/v1")
 
@@ -161,8 +172,11 @@ def resolve_path(cfg: dict[str, Any], value: str | Path) -> Path:
 
 
 def resolve_persona_path(cfg: dict[str, Any]) -> Path:
-    """人设文件：显式 system_prompt_file 优先；否则按 model 名关键字匹配 persona_map。"""
+    """人设文件：persona_file 优先，其次 system_prompt_file；都没有则按 model 名关键字匹配 persona_map。"""
     llm = cfg.get("llm") or {}
+    custom = str(llm.get("persona_file") or "").strip()
+    if custom:
+        return resolve_path(cfg, custom)
     explicit = str(llm.get("system_prompt_file") or "").strip()
     if explicit:
         return resolve_path(cfg, explicit)

@@ -16,10 +16,14 @@ public sealed class EnvValues
     public string Model { get; init; } = string.Empty;
 
     public string ReasoningEffort { get; init; } = string.Empty;
+
+    public string PersonaMode { get; init; } = "auto";
+
+    public string PersonaFile { get; init; } = string.Empty;
 }
 
 /// <summary>
-/// 定位 Bot 根目录并读写 .env（只碰 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL / LLM_REASONING_EFFORT 四个键）。
+/// 定位 Bot 根目录并读写 .env（只碰 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL / LLM_REASONING_EFFORT / LLM_PERSONA_MODE / LLM_PERSONA_FILE 六个键）。
 /// </summary>
 public static class EnvConfig
 {
@@ -27,6 +31,8 @@ public static class EnvConfig
     public const string ApiKeyKey = "LLM_API_KEY";
     public const string ModelKey = "LLM_MODEL";
     public const string ReasoningKey = "LLM_REASONING_EFFORT";
+    public const string PersonaModeKey = "LLM_PERSONA_MODE";
+    public const string PersonaFileKey = "LLM_PERSONA_FILE";
 
     /// <summary>
     /// 从程序目录向上最多 6 层查找含 src\main.py 的目录；找不到再从当前工作目录同样上溯。
@@ -84,6 +90,8 @@ public static class EnvConfig
                 ApiKey = values.TryGetValue(ApiKeyKey, out var k) ? k : string.Empty,
                 Model = values.TryGetValue(ModelKey, out var m) ? m : string.Empty,
                 ReasoningEffort = values.TryGetValue(ReasoningKey, out var r) ? r : string.Empty,
+                PersonaMode = values.TryGetValue(PersonaModeKey, out var pm) && pm.Trim().Length > 0 ? pm.Trim() : "auto",
+                PersonaFile = values.TryGetValue(PersonaFileKey, out var pf) ? pf : string.Empty,
             };
         }
         catch (Exception)
@@ -93,10 +101,21 @@ public static class EnvConfig
     }
 
     /// <summary>
-    /// 只更新 4 个 LLM 键：已有行原地替换，缺的追加到末尾，其余行（注释/顺序）原样保留。
+    /// 只更新 6 个 LLM 键：已有行原地替换，缺的追加到末尾，其余行（注释/顺序）原样保留。
     /// 写临时文件后原子覆盖，UTF-8 无 BOM。返回写入的文件路径。
     /// </summary>
     public static string Save(string botRoot, string baseUrl, string apiKey, string model, string reasoningEffort)
+        => Save(botRoot, baseUrl, apiKey, model, reasoningEffort, "auto", string.Empty);
+
+    /// <summary>同上，并额外写入 LLM_PERSONA_MODE / LLM_PERSONA_FILE（共 6 个键）。</summary>
+    public static string Save(
+        string botRoot,
+        string baseUrl,
+        string apiKey,
+        string model,
+        string reasoningEffort,
+        string personaMode,
+        string personaFile)
     {
         var path = Path.Combine(botRoot, ".env");
         var newLine = DetectNewLine(path);
@@ -108,6 +127,10 @@ public static class EnvConfig
         UpdateOrAppend(lines, ApiKeyKey, apiKey);
         UpdateOrAppend(lines, ModelKey, model);
         UpdateOrAppend(lines, ReasoningKey, reasoningEffort);
+
+        var mode = string.IsNullOrWhiteSpace(personaMode) ? "auto" : personaMode.Trim().ToLowerInvariant();
+        UpdateOrAppend(lines, PersonaModeKey, mode);
+        UpdateOrAppend(lines, PersonaFileKey, mode == "custom" ? (personaFile ?? string.Empty).Trim() : string.Empty);
 
         var text = string.Join(newLine, lines) + newLine;
         WriteAtomic(path, text);

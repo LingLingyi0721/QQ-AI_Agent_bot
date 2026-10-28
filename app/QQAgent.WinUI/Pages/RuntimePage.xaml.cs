@@ -1,10 +1,8 @@
-using System;
-using System.IO;
+﻿using System;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using QQAgent.WinUI.Models;
 using QQAgent.WinUI.Services;
 using Windows.UI;
 
@@ -19,8 +17,6 @@ public sealed partial class RuntimePage : Page
     private readonly SolidColorBrush _idleBrush = new(IdleColor);
     private readonly SolidColorBrush _runningBrush = new(RunningColor);
     private readonly SolidColorBrush _failedBrush = new(FailedColor);
-    private readonly SolidColorBrush _okTextBrush = new(Color.FromArgb(255, 0x6C, 0xCB, 0x5F));
-    private readonly SolidColorBrush _warnTextBrush = new(Color.FromArgb(255, 0xD9, 0xA4, 0x00));
 
     private bool _subscribed;
 
@@ -39,7 +35,6 @@ public sealed partial class RuntimePage : Page
             _subscribed = true;
         }
 
-        RefreshSummary();
         UpdateProcessUi();
     }
 
@@ -57,6 +52,7 @@ public sealed partial class RuntimePage : Page
     {
         DispatcherQueue.TryEnqueue(UpdateProcessUi);
     }
+
     private void UpdateProcessUi()
     {
         var runner = BotRunner.Current;
@@ -109,51 +105,6 @@ public sealed partial class RuntimePage : Page
             stopped ? InfoBarSeverity.Success : InfoBarSeverity.Error,
             stopped ? "已停止 bot 进程" : "停止失败：进程不存在或无法结束");
         UpdateProcessUi();
-    }
-
-    private void OnRefreshClicked(object sender, RoutedEventArgs e)
-    {
-        RefreshSummary();
-        ShowResult(InfoBarSeverity.Informational, "已刷新配置摘要");
-    }
-    /// <summary>只读展示 .env 与 config.yaml 的关键信息，不回显 API Key 内容。</summary>
-    private void RefreshSummary()
-    {
-        var root = App.BotRoot ?? EnvConfig.FindBotRoot();
-
-        if (string.IsNullOrWhiteSpace(root))
-        {
-            WsUrlText.Text = "未找到 bot 项目根目录";
-            SetBadge(ConfigBadge, false);
-            SetBadge(EnvBadge, false);
-            ModelText.Text = "—";
-            BaseUrlText.Text = "—";
-            ApiKeyText.Text = "未填写";
-            PersonaText.Text = "—";
-            EffortText.Text = "未设置";
-            KeyWarningBar.IsOpen = true;
-            return;
-        }
-
-        var wsUrl = EnvConfig.ReadOneBotUrl(root);
-        WsUrlText.Text = string.IsNullOrWhiteSpace(wsUrl) ? "未在 config.yaml 中找到 ws_url" : wsUrl;
-
-        SetBadge(ConfigBadge, File.Exists(Path.Combine(root, "config", "config.yaml")));
-        SetBadge(EnvBadge, File.Exists(Path.Combine(root, ".env")));
-
-        var env = EnvConfig.Load(root);
-        ModelText.Text = string.IsNullOrWhiteSpace(env.Model) ? "未设置" : env.Model;
-        BaseUrlText.Text = string.IsNullOrWhiteSpace(env.BaseUrl) ? "未设置" : env.BaseUrl;
-        ApiKeyText.Text = string.IsNullOrWhiteSpace(env.ApiKey) ? "未填写" : "已填写";
-        PersonaText.Text = Presets.InferPersona(env.Model);
-        EffortText.Text = string.IsNullOrWhiteSpace(env.ReasoningEffort) ? "未设置" : env.ReasoningEffort;
-        KeyWarningBar.IsOpen = string.IsNullOrWhiteSpace(env.ApiKey);
-    }
-
-    private void SetBadge(TextBlock target, bool exists)
-    {
-        target.Text = exists ? "已就绪" : "缺失";
-        target.Foreground = exists ? _okTextBrush : _warnTextBrush;
     }
 
     private void ShowResult(InfoBarSeverity severity, string message)

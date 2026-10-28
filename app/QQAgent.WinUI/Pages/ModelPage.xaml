@@ -14,7 +14,7 @@
 
                 <StackPanel Spacing="4" Margin="0,0,0,4">
                     <TextBlock Text="模型配置" Style="{StaticResource PageTitleStyle}" />
-                    <TextBlock Text="改完点「保存配置」写入 .env，Bot 重启后生效" Style="{StaticResource SecondaryTextStyle}" />
+                    <TextBlock Text="改完点保存，重启后生效" Style="{StaticResource SecondaryTextStyle}" />
                 </StackPanel>
 
                 <!-- 卡片 1：服务商 -->
@@ -31,11 +31,6 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <InfoBar
-                            x:Name="ProviderInfoBar"
-                            IsOpen="False"
-                            IsClosable="False"
-                            Severity="Informational" />
                     </StackPanel>
                 </Border>
 
@@ -46,7 +41,10 @@
 
                         <StackPanel Spacing="6">
                             <TextBlock Text="Base URL" Style="{StaticResource SecondaryTextStyle}" />
-                            <TextBox x:Name="BaseUrlBox" PlaceholderText="https://api.deepseek.com/v1" />
+                            <TextBox
+                                x:Name="BaseUrlBox"
+                                PlaceholderText="https://api.deepseek.com/v1"
+                                TextChanged="OnBaseUrlChanged" />
                         </StackPanel>
 
                         <StackPanel Spacing="6">
@@ -86,35 +84,65 @@
                                 </ToggleButton>
                             </Grid>
                         </StackPanel>
-
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="人设文件（随模型名自动推断）" Style="{StaticResource SecondaryTextStyle}" />
-                            <TextBox x:Name="PersonaBox" IsReadOnly="True" />
-                        </StackPanel>
-
-                        <TextBlock x:Name="BotRootText" Style="{StaticResource SecondaryTextStyle}" />
                     </StackPanel>
                 </Border>
 
-                <!-- 卡片 3：思考等级 -->
+                <!-- 卡片 3：人设 -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="人设" Style="{StaticResource SectionTitleStyle}" />
+
+                        <RadioButtons
+                            x:Name="PersonaMode"
+                            MaxColumns="2"
+                            SelectionChanged="OnPersonaModeChanged">
+                            <RadioButton Content="默认" />
+                            <RadioButton Content="自定义" />
+                        </RadioButtons>
+
+                        <TextBox
+                            x:Name="PersonaAutoBox"
+                            IsReadOnly="True"
+                            Foreground="{ThemeResource TextFillColorDisabledBrush}" />
+
+                        <Grid x:Name="PersonaCustomPanel" ColumnSpacing="8" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <ComboBox
+                                x:Name="PersonaCombo"
+                                Grid.Column="0"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnPersonaSelectionChanged" />
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                <Button Content="编辑" Click="OnEditPersonaClicked" />
+                                <Button Content="导入" Click="OnImportPersonaClicked" />
+                                <Button Content="新建" Click="OnNewPersonaClicked" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 卡片 4：思考等级 -->
                 <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="思考等级" Style="{StaticResource SectionTitleStyle}" />
                         <RadioButtons
                             x:Name="ReasonLevel"
-                            MaxColumns="4">
+                            MaxColumns="4"
+                            SelectionChanged="OnReasonLevelChanged">
                             <RadioButton Content="关闭" />
                             <RadioButton Content="低" />
                             <RadioButton Content="中" />
                             <RadioButton Content="高" />
                         </RadioButtons>
-                        <TextBlock
-                            Text="映射为 reasoning_effort，不支持该参数的服务商会自动降级重试"
-                            Style="{StaticResource SecondaryTextStyle}" />
                     </StackPanel>
                 </Border>
 
-                <!-- 卡片 4：外观 -->
+                <!-- 卡片 5：外观 -->
                 <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="外观" Style="{StaticResource SectionTitleStyle}" />

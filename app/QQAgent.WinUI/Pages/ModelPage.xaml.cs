@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using QQAgent.WinUI.Dialogs;
 using QQAgent.WinUI.Models;
 using QQAgent.WinUI.Services;
 using Windows.UI.ViewManagement;
@@ -18,6 +22,14 @@ public sealed partial class ModelPage : Page
     private bool _loadedOnce;
     private string? _suppressUrl;
     private string? _suppressModel;
+
+    /// <summary>主按钮当前处于「立即重启」态。</summary>
+    private bool _restartMode;
+
+    /// <summary>重启进行中，防连点。</summary>
+    private bool _restarting;
+
+    private IReadOnlyList<PersonaItem> _personas = Array.Empty<PersonaItem>();
 
     public ModelPage()
     {
@@ -66,7 +78,6 @@ public sealed partial class ModelPage : Page
 
             var preset = Presets.Get(_settings.Provider);
             ProviderCombo.SelectedItem = preset;
-            UpdateProviderInfo(preset);
 
             ReasonLevel.SelectedIndex = EffortToIndex(env.ReasoningEffort);
             ThemeChoice.SelectedIndex = _settings.ThemeMode switch
@@ -76,9 +87,26 @@ public sealed partial class ModelPage : Page
                 _ => 0,
             };
 
-            PersonaBox.Text = Presets.InferPersona(env.Model);
+            _personas = PersonaStore.ListAll(_botRoot ?? string.Empty);
+            PersonaCombo.ItemsSource = _personas;
+
+            var customMode = string.Equals(env.PersonaMode, "custom", StringComparison.OrdinalIgnoreCase);
+            PersonaMode.SelectedIndex = customMode ? 1 : 0;
+            ApplyPersonaMode();
+
+            if (customMode && SelectPersonaByPath(env.PersonaFile))
+            {
+                PersonaAutoBox.Text = PersonaCombo.SelectedItem is PersonaItem picked
+                    ? Path.GetFileName(picked.RelativePath)
+                    : string.Empty;
+            }
+            else
+            {
+                PersonaAutoBox.Text = Presets.InferPersona(env.Model);
+            }
+
             SaveButton.IsEnabled = _botRoot is not null;
-            UpdateBotRootHint();
+            ResetPrimaryState();
             UpdateAccentSwatch();
         }
         catch (Exception ex)
@@ -119,9 +147,10 @@ public sealed partial class ModelPage : Page
         {
             _suppressUrl = null;
             _suppressModel = null;
-            UpdateProviderInfo(preset);
             return;
         }
+
+        ResetPrimaryState();
 
         // 自定义清空，其它预设覆盖 URL 与模型名
         if (preset.IsCustom)
@@ -135,31 +164,38 @@ public sealed partial class ModelPage : Page
             ModelBox.Text = preset.DefaultModel;
         }
 
-        UpdateProviderInfo(preset);
         _settings.Provider = preset.Id;
         _settings.Save();
     }
 
-    private void UpdateProviderInfo(Preset preset)
-    {
-        if (string.IsNullOrWhiteSpace(preset.Note))
-        {
-            ProviderInfoBar.Message = string.Empty;
-            ProviderInfoBar.IsOpen = false;
-            return;
-        }
 
-        ProviderInfoBar.Message = preset.Note;
-        ProviderInfoBar.IsOpen = true;
+    private void OnBaseUrlChanged(object sender, TextChangedEventArgs e)
+    {
+        ResetPrimaryState();
     }
 
     private void OnModelTextChanged(object sender, TextChangedEventArgs e)
     {
-        PersonaBox.Text = Presets.InferPersona(ModelBox.Text);
+        if (!_loading)
+        {
+            ResetPrimaryState();
+        }
+
+        if (PersonaMode.SelectedIndex == 1)
+        {
+            return;
+        }
+
+        PersonaAutoBox.Text = Presets.InferPersona(ModelBox.Text);
     }
 
     private void OnApiKeyPasswordChanged(object sender, RoutedEventArgs e)
     {
+        if (!_loading)
+        {
+            ResetPrimaryState();
+        }
+
         if (!string.Equals(ApiKeyPlainBox.Text, ApiKeyBox.Password, StringComparison.Ordinal))
         {
             ApiKeyPlainBox.Text = ApiKeyBox.Password;
@@ -168,6 +204,11 @@ public sealed partial class ModelPage : Page
 
     private void OnApiKeyPlainTextChanged(object sender, TextChangedEventArgs e)
     {
+        if (!_loading)
+        {
+            ResetPrimaryState();
+        }
+
         if (!string.Equals(ApiKeyBox.Password, ApiKeyPlainBox.Text, StringComparison.Ordinal))
         {
             ApiKeyBox.Password = ApiKeyPlainBox.Text;
@@ -190,12 +231,22 @@ public sealed partial class ModelPage : Page
         ApiKeyBox.Focus(FocusState.Programmatic);
     }
 
+    private void OnReasonLevelChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loading)
+        {
+            ResetPrimaryState();
+        }
+    }
+
     private void OnThemeChoiceChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading)
         {
             return;
         }
+
+        ResetPrimaryState();
 
         var mode = ThemeChoice.SelectedIndex switch
         {
@@ -209,6 +260,223 @@ public sealed partial class ModelPage : Page
         App.ApplyTheme(mode);
     }
 
+    // ---------- 人设 ----------
+
+    private void OnPersonaModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        ResetPrimaryState();
+        ApplyPersonaMode();
+    }
+
+    /// <summary>两个模式的控件互斥显示；默认模式只读框显示自动推断的文件名。</summary>
+    private void ApplyPersonaMode()
+    {
+        var custom = PersonaMode.SelectedIndex == 1;
+        PersonaCustomPanel.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
+
+        if (!custom)
+        {
+            PersonaAutoBox.Text = Presets.InferPersona(ModelBox.Text);
+            return;
+        }
+
+        if (PersonaCombo.SelectedIndex < 0 && _personas.Count > 0)
+        {
+            PersonaCombo.SelectedIndex = 0;
+        }
+
+        if (PersonaCombo.SelectedItem is PersonaItem item)
+        {
+            PersonaAutoBox.Text = Path.GetFileName(item.RelativePath);
+        }
+        else
+        {
+            PersonaAutoBox.Text = string.Empty;
+        }
+    }
+
+    private void OnPersonaSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        ResetPrimaryState();
+
+        PersonaAutoBox.Text = PersonaCombo.SelectedItem is PersonaItem item
+            ? Path.GetFileName(item.RelativePath)
+            : string.Empty;
+    }
+
+    private async void OnNewPersonaClicked(object sender, RoutedEventArgs e)
+    {
+        ResetPrimaryState();
+        await EditPersonaAsync("新建人设", null, string.Empty, false);
+    }
+
+    private async void OnEditPersonaClicked(object sender, RoutedEventArgs e)
+    {
+        ResetPrimaryState();
+
+        if (_botRoot is null)
+        {
+            ShowResult(InfoBarSeverity.Error, "未找到 Bot 根目录，无法编辑人设");
+            return;
+        }
+
+        if (PersonaCombo.SelectedItem is not PersonaItem item)
+        {
+            ShowResult(InfoBarSeverity.Informational, "请先选择要编辑的人设");
+            return;
+        }
+
+        var content = PersonaStore.Load(_botRoot, item.RelativePath);
+        await EditPersonaAsync("编辑人设", item.Name, content, item.IsCustom);
+    }
+
+    private async void OnImportPersonaClicked(object sender, RoutedEventArgs e)
+    {
+        ResetPrimaryState();
+
+        if (_botRoot is null)
+        {
+            ShowResult(InfoBarSeverity.Error, "未找到 Bot 根目录，无法导入人设");
+            return;
+        }
+
+        if (App.Main is null)
+        {
+            ShowResult(InfoBarSeverity.Error, "主窗口不可用，无法打开文件选择器");
+            return;
+        }
+
+        string? sourcePath;
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker
+            {
+                SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+            };
+            picker.FileTypeFilter.Add(".txt");
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.Main);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+            var file = await picker.PickSingleFileAsync();
+            if (file is null)
+            {
+                return;
+            }
+
+            sourcePath = file.Path;
+        }
+        catch (Exception ex)
+        {
+            ShowResult(InfoBarSeverity.Error, "打开文件选择器失败：" + ex.Message);
+            return;
+        }
+
+        var result = PersonaStore.Import(sourcePath);
+        if (!result.Ok)
+        {
+            await ShowInfoAsync("导入失败", result.Message);
+            return;
+        }
+
+        var name = Path.GetFileNameWithoutExtension(sourcePath);
+        await EditPersonaAsync("导入人设", name, result.Content, false);
+    }
+
+    /// <summary>弹窗编辑并保存；overwrite 仅对已有的自定义人设生效。</summary>
+    private async Task EditPersonaAsync(string title, string? name, string content, bool overwrite)
+    {
+        if (_botRoot is null)
+        {
+            ShowResult(InfoBarSeverity.Error, "未找到 Bot 根目录，无法保存人设");
+            return;
+        }
+
+        var dialog = new PersonaEditorDialog(title, name, content)
+        {
+            XamlRoot = XamlRoot,
+        };
+
+        var picked = await dialog.ShowAsync();
+        if (picked != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        try
+        {
+            var saved = PersonaStore.Save(_botRoot, dialog.PersonaName, dialog.PersonaContent, overwrite);
+            _personas = PersonaStore.ListAll(_botRoot);
+            PersonaCombo.ItemsSource = _personas;
+
+            PersonaMode.SelectedIndex = 1;
+            ApplyPersonaMode();
+            SelectPersonaByPath(saved.RelativePath);
+            PersonaAutoBox.Text = Path.GetFileName(saved.RelativePath);
+            ShowResult(InfoBarSeverity.Success, "人设已保存：" + saved.DisplayName);
+        }
+        catch (Exception ex)
+        {
+            await ShowInfoAsync("保存人设失败", ex.Message);
+        }
+    }
+
+    private bool SelectPersonaByPath(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return false;
+        }
+
+        var target = relativePath.Trim().Replace('\\', '/');
+        foreach (var item in _personas)
+        {
+            if (string.Equals(item.RelativePath, target, StringComparison.OrdinalIgnoreCase))
+            {
+                PersonaCombo.SelectedItem = item;
+                return true;
+            }
+        }
+
+        // 只对不上路径时，退回按文件名匹配
+        var fileName = Path.GetFileName(target);
+        foreach (var item in _personas)
+        {
+            if (string.Equals(Path.GetFileName(item.RelativePath), fileName, StringComparison.OrdinalIgnoreCase))
+            {
+                PersonaCombo.SelectedItem = item;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task ShowInfoAsync(string title, string message)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = message,
+            CloseButtonText = "关闭",
+            XamlRoot = XamlRoot,
+        };
+
+        await dialog.ShowAsync();
+    }
+
+    // ---------- 保存 / 重启 ----------
+
     private void OnSaveClicked(object sender, RoutedEventArgs e)
     {
         var root = _botRoot ?? EnvConfig.FindBotRoot();
@@ -220,8 +488,23 @@ public sealed partial class ModelPage : Page
 
         try
         {
+            var custom = PersonaMode.SelectedIndex == 1;
+            if (custom && PersonaCombo.SelectedItem is not PersonaItem)
+            {
+                ShowResult(InfoBarSeverity.Warning, "自定义模式还没选人设，先选一个或新建");
+                return;
+            }
+
+            var personaFile = custom && PersonaCombo.SelectedItem is PersonaItem item ? item.RelativePath : string.Empty;
             var effort = IndexToEffort(ReasonLevel.SelectedIndex);
-            var path = EnvConfig.Save(root, BaseUrlBox.Text.Trim(), ApiKeyBox.Password, ModelBox.Text.Trim(), effort);
+            EnvConfig.Save(
+                root,
+                BaseUrlBox.Text.Trim(),
+                ApiKeyBox.Password,
+                ModelBox.Text.Trim(),
+                effort,
+                custom ? "custom" : "auto",
+                personaFile);
 
             _botRoot = root;
             if (ProviderCombo.SelectedItem is Preset preset)
@@ -231,12 +514,79 @@ public sealed partial class ModelPage : Page
 
             _settings.Save();
             SaveButton.IsEnabled = true;
-            UpdateBotRootHint();
-            ShowResult(InfoBarSeverity.Success, "已写入 " + path + "，重启 Bot 后生效");
+            ShowResult(InfoBarSeverity.Success, "已保存");
+            EnterRestartState();
         }
         catch (Exception ex)
         {
             ShowResult(InfoBarSeverity.Error, "写入失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>保存成功后主按钮变成「立即重启」。</summary>
+    private void EnterRestartState()
+    {
+        if (_restartMode || _restarting)
+        {
+            return;
+        }
+
+        _restartMode = true;
+        SaveButton.Content = "立即重启";
+        SaveButton.Click -= OnSaveClicked;
+        SaveButton.Click += OnRestartClicked;
+    }
+
+    /// <summary>任何控件改动后回到「保存配置」态。</summary>
+    private void ResetPrimaryState()
+    {
+        if (!_restartMode || _restarting)
+        {
+            return;
+        }
+
+        _restartMode = false;
+        SaveButton.Content = "保存配置";
+        SaveButton.Click -= OnRestartClicked;
+        SaveButton.Click += OnSaveClicked;
+    }
+
+    private async void OnRestartClicked(object sender, RoutedEventArgs e)
+    {
+        if (_restarting)
+        {
+            return;
+        }
+
+        _restarting = true;
+        SaveButton.IsEnabled = false;
+        ResetPrimaryState();
+
+        try
+        {
+            var runner = BotRunner.Current;
+            if (runner.IsRunning)
+            {
+                await Task.Run(runner.Stop);
+                for (var i = 0; i < 20 && runner.IsRunning; i++)
+                {
+                    await Task.Delay(50);
+                }
+            }
+
+            var result = await Task.Run(runner.Start);
+            ShowResult(result.Ok ? InfoBarSeverity.Success : InfoBarSeverity.Error, result.Message);
+        }
+        catch (Exception ex)
+        {
+            ShowResult(InfoBarSeverity.Error, "重启失败：" + ex.Message);
+        }
+        finally
+        {
+            // 禁用 1 秒防连点
+            await Task.Delay(1000);
+            _restarting = false;
+            SaveButton.IsEnabled = true;
         }
     }
 
@@ -245,21 +595,6 @@ public sealed partial class ModelPage : Page
         _loadedOnce = true;
         ReloadFromDisk();
         ShowResult(InfoBarSeverity.Informational, "已重新载入 .env 与 settings.json");
-    }
-
-    private void UpdateBotRootHint()
-    {
-        if (_botRoot is null)
-        {
-            BotRootText.Text = "未定位到 Bot 根目录，保存已禁用。";
-            SaveButton.IsEnabled = false;
-            ShowResult(InfoBarSeverity.Warning, "未找到含 src\\main.py 的目录，无法写入 .env");
-            return;
-        }
-
-        var wsUrl = EnvConfig.ReadOneBotUrl(_botRoot);
-        var suffix = wsUrl is null ? string.Empty : "　｜　OneBot: " + wsUrl;
-        BotRootText.Text = "Bot 根目录：" + _botRoot + suffix;
     }
 
     private void ShowResult(InfoBarSeverity severity, string message)
@@ -315,5 +650,3 @@ public sealed partial class ModelPage : Page
         };
     }
 }
-
-

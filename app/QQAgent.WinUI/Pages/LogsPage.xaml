@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="QQAgent.WinUI.Pages.LogsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -17,7 +17,6 @@
 
         <StackPanel Spacing="4" Margin="0,0,0,12">
             <TextBlock Text="日志" Style="{StaticResource PageTitleStyle}" />
-            <TextBlock Text="bot 进程的 stdout / stderr 实时输出，最多保留最近 3000 行" Style="{StaticResource SecondaryTextStyle}" />
         </StackPanel>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,8" VerticalAlignment="Center">

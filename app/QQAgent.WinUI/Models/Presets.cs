@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace QQAgent.WinUI.Models;
 
@@ -86,7 +87,7 @@ public static class Presets
             return DefaultPersona;
         }
 
-        foreach (var pair in PersonaMap)
+        foreach (var pair in PersonaMap.OrderByDescending(p => p.Key.Length))
         {
             if (name.Contains(pair.Key, StringComparison.Ordinal))
             {
