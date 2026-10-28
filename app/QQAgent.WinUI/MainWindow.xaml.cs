@@ -8,6 +8,7 @@ using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using QQAgent.WinUI.Pages;
 using QQAgent.WinUI.Services;
@@ -37,6 +38,26 @@ public sealed partial class MainWindow : Window
     private bool _initialized;
 
     private bool _closeConfirmed;
+
+    /// <summary>最近一次点导航项的时间（UTC），用于区分「点导航项导致的收起」与「用户主动收起」。</summary>
+
+    private DateTime _lastItemInvokedUtc = DateTime.MinValue;
+
+    /// <summary>汉堡按钮：用户主动点击时重置上面的时间戳，保证仍能正常收起。</summary>
+
+    private Button? _paneToggleButton;
+
+    /// <summary>点导航项后这段时间内忽略 Pane 收起（对齐任务管理器：切页不收起侧栏）。</summary>
+
+    private const int NavItemCollapseGuardMs = 600;
+
+    /// <summary>防止设置 PaneDisplayMode 时重入 IsPaneOpen 回调。</summary>
+
+    private bool _syncingPaneDisplayMode;
+
+    /// <summary>IsPaneOpen 属性变化的回调令牌，窗口关闭时注销。</summary>
+
+    private long _paneOpenCallbackToken;
 
     public MainWindow()
     {
@@ -93,6 +114,21 @@ public sealed partial class MainWindow : Window
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
         NavView.ItemInvoked -= OnNavItemInvoked;
+        NavView.Loaded -= OnNavViewLoaded;
+        NavView.PaneClosing -= OnNavPaneClosing;
+
+        if (_paneOpenCallbackToken != 0)
+        {
+            NavView.UnregisterPropertyChangedCallback(NavigationView.IsPaneOpenProperty, _paneOpenCallbackToken);
+            _paneOpenCallbackToken = 0;
+        }
+
+        if (_paneToggleButton is not null)
+        {
+            _paneToggleButton.Click -= OnPaneToggleButtonClicked;
+            _paneToggleButton.PointerPressed -= OnPaneToggleButtonPointerPressed;
+            _paneToggleButton = null;
+        }
 
         _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
         Activated -= OnWindowActivated;
@@ -222,6 +258,9 @@ public sealed partial class MainWindow : Window
     private void SetupNavigation()
     {
         NavView.ItemInvoked += OnNavItemInvoked;
+        NavView.PaneClosing += OnNavPaneClosing;
+        NavView.Loaded += OnNavViewLoaded;
+        _paneOpenCallbackToken = NavView.RegisterPropertyChangedCallback(NavigationView.IsPaneOpenProperty, OnIsPaneOpenPropertyChanged);
 
         ApplySettingsItemText();
 
@@ -249,8 +288,109 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 展开态切到 Left（Left 模式下点导航项不会自动收起，对齐任务管理器），
+    /// 收起态切回 LeftCompact（保留 60px 图标栏）。仅改显示模式，不直接改 IsPaneOpen。
+    /// </summary>
+    private void OnIsPaneOpenPropertyChanged(DependencyObject sender, DependencyProperty dp)
+    {
+        if (_syncingPaneDisplayMode)
+        {
+            return;
+        }
+
+        var target = NavView.IsPaneOpen
+            ? NavigationViewPaneDisplayMode.Left
+            : NavigationViewPaneDisplayMode.LeftCompact;
+
+        if (NavView.PaneDisplayMode == target)
+        {
+            return;
+        }
+
+        _syncingPaneDisplayMode = true;
+        try
+        {
+            NavView.PaneDisplayMode = target;
+        }
+        finally
+        {
+            _syncingPaneDisplayMode = false;
+        }
+    }
+
+    /// <summary>
+    /// 兜底：Pane 真要收起时，若刚点过导航项（600ms 内）就取消。
+    /// 注意：本平台版本对 Cancel 不生效（实测），真正起作用的是上面的显示模式切换。
+    /// </summary>
+    private void OnNavPaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
+    {
+        if (args.Cancel)
+        {
+            return;
+        }
+
+        if ((DateTime.UtcNow - _lastItemInvokedUtc).TotalMilliseconds < NavItemCollapseGuardMs)
+        {
+            args.Cancel = true;
+        }
+    }
+
+    private void OnNavViewLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_paneToggleButton is not null)
+        {
+            return;
+        }
+
+        _paneToggleButton = FindPaneToggleButton(NavView);
+        if (_paneToggleButton is null)
+        {
+            return;
+        }
+
+        _paneToggleButton.Click += OnPaneToggleButtonClicked;
+        _paneToggleButton.PointerPressed += OnPaneToggleButtonPointerPressed;
+    }
+
+    /// <summary>用户主动点汉堡：清掉时间戳，让默认开合逻辑照常执行。不取消默认行为。</summary>
+    private void OnPaneToggleButtonClicked(object sender, RoutedEventArgs e)
+    {
+        _lastItemInvokedUtc = DateTime.MinValue;
+    }
+
+    /// <summary>按下早于 Click，先清一次，避免「刚点完导航项立刻点汉堡」被误判。</summary>
+    private void OnPaneToggleButtonPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _lastItemInvokedUtc = DateTime.MinValue;
+    }
+
+    private static Button? FindPaneToggleButton(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is Button button && string.Equals(button.Name, "TogglePaneButton", StringComparison.Ordinal))
+            {
+                return button;
+            }
+
+            var found = FindPaneToggleButton(child);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     private void OnNavItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
+        // 记录时间点：紧随其后的 PaneClosing 属于「点导航项导致的收起」，应当被取消。
+        _lastItemInvokedUtc = DateTime.UtcNow;
+
         if (args.IsSettingsInvoked)
         {
             NavigateTo(typeof(SettingsPage));
