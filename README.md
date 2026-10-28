@@ -78,6 +78,54 @@ pwsh -File .\scripts\start-qq-napcat.ps1 -DryRun
 pwsh -File .\scripts\start-qq-napcat.ps1
 ```
 
+## WinUI 3 桌面端
+
+原生 WinUI 3 配置面板（`app/QQAgent.WinUI/`）+ 自举启动器，双击即可在干净的 Win10/Win11 上跑起来。
+
+### 构建与打包
+
+```powershell
+# 构建（产物在 app\QQAgent.WinUI\bin\Release\net10.0-windows10.0.19041.0\win-x64\）
+dotnet build app\QQAgent.WinUI\QQAgent.WinUI.csproj -c Release -r win-x64
+
+# 一键打包到 dist\（主程序 + 启动器 + README.txt）
+pwsh -File scripts\build-gui.ps1 -Configuration Release -OutDir dist
+```
+
+### 分发形态
+
+```
+dist\
+  QQAgent.exe    自举启动器（.NET Framework 4.7.2，Win10 自带，22.5 KB）
+  app\           主程序 QQAgent.WinUI.exe 及其依赖
+  README.txt
+```
+
+整个 `dist\` 打包成 zip 即可分发；`dist/`、`launcher/bin/`、`app/**/bin|obj` 均不入库。
+
+### 自举说明
+
+启动器全程 WinForms 进度窗，无黑框，按顺序检测并补齐运行环境：
+
+1. **.NET 桌面运行时 10.x** —— 查 `C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App` 下是否有 `10.*` 目录；缺则下载 `https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe`，以 `/install /quiet /norestart` 静默安装（退出码 0 / 3010 视为成功）
+2. **Windows App Runtime 1.8** —— 先查注册表 `HKLM\SOFTWARE\Microsoft\WindowsAppRuntime\1.8*`（含 `WOW6432Node`），再查 `%ProgramFiles%\WindowsApps\Microsoft.WindowsAppRuntime.1.8*`、Appx 包仓库与 bootstrap 加载，多路取或（实测部分机器注册表键缺失，单靠注册表会误判）；缺则下载 `https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-x64.exe`（备用固定版本 `1.8.260921001`），以 `--quiet` 安装
+3. 全部就绪后拉起 `app\QQAgent.WinUI.exe`，启动器自身退出
+
+任一环节失败会弹窗写明失败阶段，并提供「打开下载页面」按钮（.NET / WinAppRuntime 官方下载页）。启动器带 `requireAdministrator` 清单，安装时自动请求 UAC。
+
+命令行参数：
+
+```powershell
+.\dist\QQAgent.exe --check       # 只检测不安装，结果写入 %TEMP%\qqagent-launcher-check.txt，退出码 0/1
+.\dist\QQAgent.exe --no-install  # 检测到缺失时只提示，不自动安装
+```
+
+### Win10 兼容降级链
+
+- Win10 1809+ / Win11 x64：WinUI 3 + Windows App SDK 1.8（`TargetPlatformMinVersion` 10.0.17763.0）
+- 缺 .NET 10 桌面运行时 / Windows App Runtime 1.8：启动器自动补装；自动安装失败时给出官方下载页
+- 需要零依赖兜底：`gui/` 下的 WPF 面板（无 NuGet 依赖）仍可直接用 `dotnet build` 构建
+
 ## GUI 配置面板
 
 WinUI 3 / Fluent 2 风格的本地 WPF 控制面板（`gui/`，零 NuGet 依赖），只负责改 `.env` 里的四个键，不替代 yaml。

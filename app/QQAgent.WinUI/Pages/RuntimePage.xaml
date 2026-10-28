@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="QQAgent.WinUI.Pages.RuntimePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Padding="28,20,28,28">
+            <StackPanel MaxWidth="960" Spacing="12" HorizontalAlignment="Stretch">
+
+                <StackPanel Spacing="4" Margin="0,0,0,4">
+                    <TextBlock Text="运行控制" Style="{StaticResource PageTitleStyle}" />
+                    <TextBlock Text="启动会执行 python -m src.main，日志实时进入「日志」页" Style="{StaticResource SecondaryTextStyle}" />
+                </StackPanel>
+
+                <!-- 卡片 1：Bot 进程 -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Bot 进程" Style="{StaticResource SectionTitleStyle}" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                <Ellipse x:Name="StateDot" Width="16" Height="16" VerticalAlignment="Center" />
+                                <TextBlock x:Name="StateText" Text="未运行" FontSize="14" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="StartButton" Content="启动 Bot" Style="{StaticResource AccentButtonStyle}" Click="OnStartClicked" />
+                                <Button x:Name="StopButton" Content="停止 Bot" IsEnabled="False" Click="OnStopClicked" />
+                            </StackPanel>
+                        </Grid>
+
+                        <InfoBar x:Name="ResultBar" IsOpen="False" IsClosable="True" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 卡片 2：OneBot 连接 -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="OneBot 连接" Style="{StaticResource SectionTitleStyle}" />
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="ws_url" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="WsUrlText" Grid.Column="1" Text="—" TextWrapping="Wrap" IsTextSelectionEnabled="True" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="config\config.yaml" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="ConfigBadge" Grid.Column="1" Text="缺失" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text=".env" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="EnvBadge" Grid.Column="1" Text="缺失" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 卡片 3：配置摘要 -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="12">
+                        <Grid>
+                            <TextBlock Text="配置摘要" Style="{StaticResource SectionTitleStyle}" VerticalAlignment="Center" />
+                            <Button x:Name="RefreshButton" Content="刷新" HorizontalAlignment="Right" Click="OnRefreshClicked" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="12" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="当前模型" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="ModelText" Grid.Column="1" Text="—" TextWrapping="Wrap" IsTextSelectionEnabled="True" VerticalAlignment="Center" />
+
+                            <TextBlock Grid.Row="1" Text="Base URL" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="BaseUrlText" Grid.Row="1" Grid.Column="1" Text="—" TextWrapping="Wrap" IsTextSelectionEnabled="True" VerticalAlignment="Center" />
+
+                            <TextBlock Grid.Row="2" Text="API Key" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="ApiKeyText" Grid.Row="2" Grid.Column="1" Text="未填写" VerticalAlignment="Center" />
+
+                            <TextBlock Grid.Row="3" Text="人设文件" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="PersonaText" Grid.Row="3" Grid.Column="1" Text="—" VerticalAlignment="Center" />
+
+                            <TextBlock Grid.Row="4" Text="思考等级" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="EffortText" Grid.Row="4" Grid.Column="1" Text="未设置" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <InfoBar x:Name="KeyWarningBar" Severity="Warning" IsOpen="False" IsClosable="False"
+                                 Message="未配置 API Key，启动后收到消息只会回复错误提示" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

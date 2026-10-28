@@ -60,3 +60,8 @@ desktop.ini
 gui/bin/
 gui/obj/
 gui/error.log
+
+# ---------- WinUI 3 / .NET ----------
+app/**/bin/
+app/**/obj/
+launcher/bin/
