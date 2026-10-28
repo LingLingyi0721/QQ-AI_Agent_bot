@@ -1,6 +1,7 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Microsoft.UI;
@@ -21,6 +22,21 @@ namespace QQAgent.WinUI;
 
 public sealed partial class MainWindow : Window
 {
+    /// <summary>侧栏收起态宽度。</summary>
+    private const double SideBarCompactWidth = 48;
+
+    /// <summary>侧栏展开态宽度。</summary>
+    private const double SideBarExpandedWidth = 200;
+
+    /// <summary>侧栏宽度动画时长（ms）。</summary>
+    private const int SideBarAnimateDurationMs = 180;
+
+    private static readonly SolidColorBrush HoverBrush = new(Windows.UI.Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF));
+
+    private static readonly SolidColorBrush SelectedBrush = new(Windows.UI.Color.FromArgb(0x1F, 0xFF, 0xFF, 0xFF));
+
+    private static readonly SolidColorBrush TransparentBrush = new(Colors.Transparent);
+
     private readonly UISettings _uiSettings = new();
 
     private readonly Dictionary<string, Type> _pages = new(StringComparer.OrdinalIgnoreCase)
@@ -29,6 +45,10 @@ public sealed partial class MainWindow : Window
         ["runtime"] = typeof(RuntimePage),
         ["logs"] = typeof(LogsPage),
     };
+
+    private readonly List<Button> _navButtons = new();
+
+    private readonly List<TextBlock> _navTexts = new();
 
     private IntPtr _hwnd = IntPtr.Zero;
 
@@ -40,46 +60,25 @@ public sealed partial class MainWindow : Window
 
     private bool _closeConfirmed;
 
-    /// <summary>最近一次点导航项的时间（UTC），用于区分「点导航项导致的收起」与「用户主动收起」。</summary>
+    /// <summary>侧栏是否展开（唯一状态源，不再依赖 NavigationView pane）。</summary>
+    private bool _isSideBarOpen;
 
-    private DateTime _lastItemInvokedUtc = DateTime.MinValue;
+    /// <summary>当前选中的导航按钮。</summary>
+    private Button? _selectedNav;
 
-    /// <summary>汉堡按钮：用户主动点击时重置上面的时间戳，保证仍能正常收起。</summary>
+    /// <summary>侧栏宽度动画帧定时器（GridLength 无法用 Storyboard 动画，逐帧驱动列宽）。</summary>
+    private readonly DispatcherTimer _sideBarTimer = new() { Interval = TimeSpan.FromMilliseconds(15) };
 
-    private Button? _paneToggleButton;
+    /// <summary>动画进行中标记，用于连点时停旧动画并从当前值续接。</summary>
+    private bool _sideBarAnimating;
 
-    /// <summary>点导航项后这段时间内忽略 Pane 收起（对齐任务管理器：切页不收起侧栏）。</summary>
+    private System.Diagnostics.Stopwatch? _sideBarWatch;
 
-    private const int NavItemCollapseGuardMs = 600;
+    private double _sideBarFromWidth;
 
-    /// <summary>展开动画时长（ms）。</summary>
-    private const int PaneOpenDurationMs = 180;
+    private double _sideBarToWidth;
 
-    /// <summary>收起动画时长（ms）。</summary>
-    private const int PaneCollapseDurationMs = 140;
-
-    /// <summary>收起动画的右移终点（逻辑 px）。</summary>
-    private const double PaneCollapseExitOffset = 150;
-
-    /// <summary>防止设置 PaneDisplayMode 时重入 IsPaneOpen 回调。</summary>
-
-    private bool _syncingPaneDisplayMode;
-
-    /// <summary>侧栏过渡动画（每次播放重建，连点时先停旧的）。</summary>
-    private Storyboard? _paneStoryboard;
-
-    /// <summary>动画进行中标记；Completed 后复位，配合版本号防止旧回调改错模式。</summary>
-    private bool _paneAnimating;
-
-    /// <summary>当前动画的目标方向（true = 展开），用于忽略同向重复触发。</summary>
-    private bool _paneAnimTargetOpen;
-
-    /// <summary>动画版本号：连点时递增，旧 Storyboard 的 Completed 直接作废。</summary>
-    private int _paneAnimVersion;
-
-    /// <summary>IsPaneOpen 属性变化的回调令牌，窗口关闭时注销。</summary>
-
-    private long _paneOpenCallbackToken;
+    private bool _sideBarTargetOpen;
 
     public MainWindow()
     {
@@ -108,18 +107,24 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>当前侧栏是否展开（自检/自动化用）。</summary>
-    public bool IsPaneOpenNow => NavView.IsPaneOpen;
+    public bool IsPaneOpenNow => _isSideBarOpen;
 
-    /// <summary>当前侧栏水平位移（自检/自动化用，动画中间态采样）。</summary>
-    public double PaneTranslateX => PaneTransform.TranslateX;
+    /// <summary>当前侧栏实际宽度（自检/自动化用，动画中间态采样）。</summary>
+    public double SideBarWidthNow => SideBar.ActualWidth;
 
-    /// <summary>当前侧栏整体透明度（自检/自动化用）。</summary>
-    public double PaneOpacity => NavView.Opacity;
+    /// <summary>侧栏动画是否正在播放（自检/自动化用）。</summary>
+    public bool IsSideBarAnimatingNow => _sideBarAnimating;
 
-    /// <summary>自检用：主动展开侧栏（走与点汉堡相同的 IsPaneOpen 回调）。</summary>
+    /// <summary>自检用：主动展开侧栏（走与点汉堡相同的动画路径）。</summary>
     public void OpenPaneForTest()
     {
-        NavView.IsPaneOpen = true;
+        if (_isSideBarOpen)
+        {
+            return;
+        }
+
+        _isSideBarOpen = true;
+        AnimateSideBar();
     }
 
     private void OnWindowActivated(object sender, WindowActivatedEventArgs args)
@@ -150,24 +155,18 @@ public sealed partial class MainWindow : Window
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
-        StopPaneAnimation();
+        StopSideBarAnimation();
 
-        NavView.ItemInvoked -= OnNavItemInvoked;
-        NavView.Loaded -= OnNavViewLoaded;
-        NavView.PaneClosing -= OnNavPaneClosing;
-
-        if (_paneOpenCallbackToken != 0)
+        foreach (var button in _navButtons)
         {
-            NavView.UnregisterPropertyChangedCallback(NavigationView.IsPaneOpenProperty, _paneOpenCallbackToken);
-            _paneOpenCallbackToken = 0;
+            button.Click -= NavButton_Click;
+            button.PointerEntered -= NavButton_PointerEntered;
+            button.PointerExited -= NavButton_PointerExited;
         }
 
-        if (_paneToggleButton is not null)
-        {
-            _paneToggleButton.Click -= OnPaneToggleButtonClicked;
-            _paneToggleButton.PointerPressed -= OnPaneToggleButtonPointerPressed;
-            _paneToggleButton = null;
-        }
+        _navButtons.Clear();
+        _navTexts.Clear();
+        _selectedNav = null;
 
         _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
         Activated -= OnWindowActivated;
@@ -296,302 +295,213 @@ public sealed partial class MainWindow : Window
         });
     }
 
-    // ---- 导航 ----
+    // ---- 导航（自绘侧栏，不使用 NavigationView pane）----
 
     private void SetupNavigation()
     {
-        NavView.ItemInvoked += OnNavItemInvoked;
-        NavView.PaneClosing += OnNavPaneClosing;
-        NavView.Loaded += OnNavViewLoaded;
-        _paneOpenCallbackToken = NavView.RegisterPropertyChangedCallback(NavigationView.IsPaneOpenProperty, OnIsPaneOpenPropertyChanged);
+        _navButtons.Clear();
+        _navTexts.Clear();
 
-        ApplySettingsItemText();
+        foreach (var button in new[] { ModelNav, RuntimeNav, LogsNav, SettingsNav })
+        {
+            _navButtons.Add(button);
+            button.Click += NavButton_Click;
+            button.PointerEntered += NavButton_PointerEntered;
+            button.PointerExited += NavButton_PointerExited;
+        }
 
-        NavView.SelectedItem = ModelNavItem;
+        foreach (var text in new[] { ModelText, RuntimeText, LogsText, SettingsText })
+        {
+            _navTexts.Add(text);
+            text.Opacity = 0;
+            text.Visibility = Visibility.Collapsed;
+        }
+
+        SideBarColumn.Width = new GridLength(SideBarCompactWidth);
+
+        SetSelected(ModelNav);
         if (ContentFrame.CurrentSourcePageType != typeof(ModelPage))
         {
             ContentFrame.Navigate(typeof(ModelPage));
         }
     }
 
-    /// <summary>内置「设置」项的文案改成中文；拿不到就保持系统默认。</summary>
-
-    private void ApplySettingsItemText()
+    /// <summary>汉堡：只翻转展开状态并播放宽度/文字动画，不碰布局基准。</summary>
+    private void Hamburger_Click(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            if (NavView.SettingsItem is NavigationViewItem settingsItem)
-            {
-                settingsItem.Content = "设置";
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine(ex.ToString());
-        }
+        _isSideBarOpen = !_isSideBarOpen;
+        AnimateSideBar();
     }
 
     /// <summary>
-    /// 展开态切到 Left（Left 模式下点导航项不会自动收起，对齐任务管理器），
-    /// 收起态切回 LeftCompact（保留 60px 图标栏）。仅改显示模式，不直接改 IsPaneOpen。
-    /// 模式切换本身是瞬间的布局变化，视觉过渡由 PlayPaneAnimation 的合成动画补上。
+    /// 侧栏展开/收起过渡：逐帧驱动 SideBarColumn.Width（48 到 200，180ms 三次缓出），
+    /// 文字同步淡入（120ms，延迟 40ms）/淡出（80ms，结束后收起可见性）。
+    /// 侧栏始终位于 Column 0，X 基准恒为 0，反复开合不会累积偏移。
+    /// 说明：GridLength 不是 double，Storyboard 无法直接动画列宽，故用帧定时器逐帧赋值。
     /// </summary>
-    private void OnIsPaneOpenPropertyChanged(DependencyObject sender, DependencyProperty dp)
+    private void AnimateSideBar()
     {
-        if (_syncingPaneDisplayMode)
+        var open = _isSideBarOpen;
+        StopSideBarAnimation();
+        _sideBarTargetOpen = open;
+        var current = SideBarColumn.ActualWidth;
+        if (current <= 0)
         {
-            return;
+            current = open ? SideBarCompactWidth : SideBarExpandedWidth;
         }
-
-        if (NavView.IsPaneOpen)
+        _sideBarFromWidth = current;
+        _sideBarToWidth = open ? SideBarExpandedWidth : SideBarCompactWidth;
+        if (open)
         {
-            // 动画已经在往展开方向跑就忽略重复请求，避免自己和自己抢
-            if (_paneAnimating && _paneAnimTargetOpen)
+            foreach (var text in _navTexts)
             {
-                return;
+                text.Visibility = Visibility.Visible;
             }
+        }
+        _sideBarTimer.Tick -= OnSideBarTick;
+        _sideBarTimer.Tick += OnSideBarTick;
+        _sideBarWatch = Stopwatch.StartNew();
+        _sideBarAnimating = true;
+        _sideBarTimer.Start();
+    }
 
-            SwitchPaneDisplayMode(NavigationViewPaneDisplayMode.Left);
-            PlayPaneAnimation(open: true);
+    /// <summary>每帧推进宽度与文字透明度；三次缓出（CubicEaseOut）。</summary>
+    private void OnSideBarTick(object? sender, object e)
+    {
+        if (_sideBarWatch is null)
+        {
+            StopSideBarAnimation();
             return;
         }
 
-        if (NavView.PaneDisplayMode == NavigationViewPaneDisplayMode.Left)
+        var elapsed = _sideBarWatch.Elapsed.TotalMilliseconds;
+        var t = Math.Clamp(elapsed / SideBarAnimateDurationMs, 0d, 1d);
+        var eased = 1 - Math.Pow(1 - t, 3);
+        SideBarColumn.Width = new GridLength(_sideBarFromWidth + ((_sideBarToWidth - _sideBarFromWidth) * eased));
+        if (_sideBarTargetOpen)
         {
-            // 收起动画期间保持 Left 模式，等动画结束后再切回紧凑模式
-            if (_paneAnimating && !_paneAnimTargetOpen)
+            var fade = Math.Clamp((elapsed - 40) / 120d, 0d, 1d);
+            var opacity = 1 - Math.Pow(1 - fade, 3);
+            foreach (var text in _navTexts)
             {
-                return;
+                text.Opacity = opacity;
             }
-
-            PlayPaneAnimation(open: false);
-            return;
         }
-
-        StopPaneAnimation();
-        ResetPaneVisual();
-    }
-
-    /// <summary>切换侧栏显示模式；切换期间屏蔽 IsPaneOpen 回调，避免重入。</summary>
-    private void SwitchPaneDisplayMode(NavigationViewPaneDisplayMode mode)
-    {
-        if (NavView.PaneDisplayMode == mode)
+        else
         {
-            return;
-        }
-
-        _syncingPaneDisplayMode = true;
-        try
-        {
-            NavView.PaneDisplayMode = mode;
-            NavView.UpdateLayout();
-        }
-        finally
-        {
-            _syncingPaneDisplayMode = false;
-        }
-    }
-
-    /// <summary>
-    /// 展开/收起过渡动画：只动合成属性（RenderTransform.TranslateX + Opacity），不触发布局动画。
-    /// 展开 180ms EaseOut：-162 → 0，Opacity 0.35 → 1；
-    /// 收起 140ms EaseIn：0 → +150，Opacity 1 → 0，完成后才切回 LeftCompact 并复位。
-    /// </summary>
-    private void PlayPaneAnimation(bool open)
-    {
-        _paneAnimVersion++;
-        var version = _paneAnimVersion;
-        StopPaneAnimation();
-
-        _paneAnimating = true;
-        _paneAnimTargetOpen = open;
-
-        try
-        {
-            var durationMs = open ? PaneOpenDurationMs : PaneCollapseDurationMs;
-            var fromX = open ? -(NavView.OpenPaneLength - NavView.CompactPaneLength) : 0d;
-            var toX = open ? 0d : PaneCollapseExitOffset;
-            var fromOpacity = open ? 0.35 : 1d;
-            var toOpacity = open ? 1d : 0d;
-
-            // 先落到起始帧，避免 Begin 之前闪一帧终态
-            PaneTransform.TranslateY = 0;
-            PaneTransform.TranslateX = fromX;
-            NavView.Opacity = fromOpacity;
-
-            var storyboard = new Storyboard();
-            var easing = new CubicEase { EasingMode = open ? EasingMode.EaseOut : EasingMode.EaseIn };
-
-            var move = new DoubleAnimation
+            var fade = Math.Clamp(elapsed / 80d, 0d, 1d);
+            foreach (var text in _navTexts)
             {
-                From = fromX,
-                To = toX,
-                Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
-                EasingFunction = easing,
-            };
-            Storyboard.SetTarget(move, NavView);
-            Storyboard.SetTargetProperty(move, "(UIElement.RenderTransform).(CompositeTransform.TranslateX)");
-            storyboard.Children.Add(move);
-
-            var fade = new DoubleAnimation
-            {
-                From = fromOpacity,
-                To = toOpacity,
-                Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
-                EasingFunction = easing,
-            };
-            Storyboard.SetTarget(fade, NavView);
-            Storyboard.SetTargetProperty(fade, "Opacity");
-            storyboard.Children.Add(fade);
-
-            storyboard.Completed += (_, _) =>
-            {
-                if (version != _paneAnimVersion)
-                {
-                    return;
-                }
-
-                _paneAnimating = false;
-
-                if (!open)
-                {
-                    // 已经淡到全透明，此时切模式用户看不到宽度跳变
-                    SwitchPaneDisplayMode(NavigationViewPaneDisplayMode.LeftCompact);
-                }
-
-                ResetPaneVisual();
-            };
-
-            _paneStoryboard = storyboard;
-            storyboard.Begin();
-        }
-        catch (Exception ex)
-        {
-            // 动画失败不影响功能：直接落到目标态
-            Debug.WriteLine(ex.ToString());
-            _paneAnimating = false;
-            if (!open)
-            {
-                SwitchPaneDisplayMode(NavigationViewPaneDisplayMode.LeftCompact);
-            }
-
-            ResetPaneVisual();
-        }
-    }
-
-    /// <summary>停掉正在跑的侧栏动画（连点时先停旧的再起新的）。</summary>
-    private void StopPaneAnimation()
-    {
-        if (_paneStoryboard is null)
-        {
-            return;
-        }
-
-        try
-        {
-            _paneStoryboard.Stop();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine(ex.ToString());
-        }
-
-        _paneStoryboard = null;
-    }
-
-    /// <summary>把动画留下的偏移与透明度复位，避免影响后续布局/截图。</summary>
-    private void ResetPaneVisual()
-    {
-        PaneTransform.TranslateX = 0;
-        PaneTransform.TranslateY = 0;
-        NavView.Opacity = 1;
-    }
-
-    /// <summary>
-    /// 兜底：Pane 真要收起时，若刚点过导航项（600ms 内）就取消。
-    /// 注意：本平台版本对 Cancel 不生效（实测），真正起作用的是上面的显示模式切换。
-    /// </summary>
-    private void OnNavPaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
-    {
-        if (args.Cancel)
-        {
-            return;
-        }
-
-        if ((DateTime.UtcNow - _lastItemInvokedUtc).TotalMilliseconds < NavItemCollapseGuardMs)
-        {
-            args.Cancel = true;
-        }
-    }
-
-    private void OnNavViewLoaded(object sender, RoutedEventArgs e)
-    {
-        if (_paneToggleButton is not null)
-        {
-            return;
-        }
-
-        _paneToggleButton = FindPaneToggleButton(NavView);
-        if (_paneToggleButton is null)
-        {
-            return;
-        }
-
-        _paneToggleButton.Click += OnPaneToggleButtonClicked;
-        _paneToggleButton.PointerPressed += OnPaneToggleButtonPointerPressed;
-    }
-
-    /// <summary>用户主动点汉堡：清掉时间戳，让默认开合逻辑照常执行。不取消默认行为。</summary>
-    private void OnPaneToggleButtonClicked(object sender, RoutedEventArgs e)
-    {
-        _lastItemInvokedUtc = DateTime.MinValue;
-    }
-
-    /// <summary>按下早于 Click，先清一次，避免「刚点完导航项立刻点汉堡」被误判。</summary>
-    private void OnPaneToggleButtonPointerPressed(object sender, PointerRoutedEventArgs e)
-    {
-        _lastItemInvokedUtc = DateTime.MinValue;
-    }
-
-    private static Button? FindPaneToggleButton(DependencyObject root)
-    {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is Button button && string.Equals(button.Name, "TogglePaneButton", StringComparison.Ordinal))
-            {
-                return button;
-            }
-
-            var found = FindPaneToggleButton(child);
-            if (found is not null)
-            {
-                return found;
+                text.Opacity = 1 - fade;
             }
         }
 
-        return null;
+        if (t >= 1)
+        {
+            FinishSideBarAnimation();
+        }
     }
 
-    private void OnNavItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    /// <summary>动画收尾：落在目标宽度，收起时隐藏文字。</summary>
+    private void FinishSideBarAnimation()
     {
-        // 记录时间点：紧随其后的 PaneClosing 属于「点导航项导致的收起」，应当被取消。
-        _lastItemInvokedUtc = DateTime.UtcNow;
+        _sideBarTimer.Stop();
+        _sideBarWatch = null;
+        _sideBarAnimating = false;
+        SideBarColumn.Width = new GridLength(_sideBarToWidth);
+        foreach (var text in _navTexts)
+        {
+            text.Opacity = _sideBarTargetOpen ? 1 : 0;
+            text.Visibility = _sideBarTargetOpen ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
 
-        if (args.IsSettingsInvoked)
+    /// <summary>停掉正在跑的侧栏动画，保留当前宽度/文字透明度作为下一次的起点（防连点跳变）。</summary>
+    private void StopSideBarAnimation()
+    {
+        _sideBarTimer.Stop();
+        _sideBarWatch = null;
+        _sideBarAnimating = false;
+    }
+    /// <summary>导航项悬停：选中项保持选中底色，其余显示悬停底色。</summary>
+    private void NavButton_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Button button && !ReferenceEquals(button, _selectedNav))
+        {
+            button.Background = HoverBrush;
+        }
+    }
+
+    /// <summary>导航项离开：非选中项恢复透明底色。</summary>
+    private void NavButton_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Button button && !ReferenceEquals(button, _selectedNav))
+        {
+            button.Background = TransparentBrush;
+        }
+    }
+
+    /// <summary>点导航项：切页 + 更新选中态，不改变侧栏展开状态。</summary>
+    private void NavButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not string tag)
+        {
+            return;
+        }
+
+        SetSelected(button);
+
+        if (string.Equals(tag, "settings", StringComparison.OrdinalIgnoreCase))
         {
             NavigateTo(typeof(SettingsPage));
-            SelectSettingsItem();
             return;
         }
 
-        if (args.InvokedItemContainer is NavigationViewItem item
-            && item.Tag is string tag
-            && _pages.TryGetValue(tag, out var pageType))
+        if (_pages.TryGetValue(tag, out var pageType))
         {
             NavigateTo(pageType);
         }
+    }
+
+    /// <summary>更新选中态：恢复上一个按钮的底色/竖条，设置当前按钮。</summary>
+    private void SetSelected(Button? button)
+    {
+        if (ReferenceEquals(_selectedNav, button))
+        {
+            return;
+        }
+
+        if (_selectedNav is not null)
+        {
+            _selectedNav.Background = TransparentBrush;
+            var oldIndicator = FindIndicator(_selectedNav);
+            if (oldIndicator is not null)
+            {
+                oldIndicator.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        _selectedNav = button;
+
+        if (button is null)
+        {
+            return;
+        }
+
+        button.Background = SelectedBrush;
+        var indicator = FindIndicator(button);
+        if (indicator is not null)
+        {
+            indicator.Visibility = Visibility.Visible;
+        }
+    }
+
+    /// <summary>取导航按钮内容里左侧 3px 的强调色竖条。</summary>
+    private static Border? FindIndicator(Button button)
+    {
+        return button.Content is Grid grid
+            ? grid.Children.OfType<Border>().FirstOrDefault(b => (b.Tag as string) == "indicator")
+            : null;
     }
 
     private void NavigateTo(Type pageType)
@@ -599,18 +509,6 @@ public sealed partial class MainWindow : Window
         if (ContentFrame.CurrentSourcePageType != pageType)
         {
             ContentFrame.Navigate(pageType);
-        }
-    }
-
-    private void SelectSettingsItem()
-    {
-        try
-        {
-            NavView.SelectedItem = NavView.SettingsItem;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine(ex.ToString());
         }
     }
 
