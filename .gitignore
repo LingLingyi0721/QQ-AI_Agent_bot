@@ -65,3 +65,6 @@ gui/error.log
 app/**/bin/
 app/**/obj/
 launcher/bin/
+# ---------- 分发产物（项目根） ----------
+/QQAgent.exe
+/QQAgent.App/

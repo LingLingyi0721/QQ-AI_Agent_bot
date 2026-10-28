@@ -1,5 +1,7 @@
 # QQ-AI_Agent_bot
 
+双击仓库根目录的 QQAgent.exe 即可启动（首次缺运行时会自动安装）。
+
 基于本机非安装版 QQNT（工作目录 `E:\APP\QQ-AI_Agent`）做非官方 AI 聊天 bot，通过 NapCat 进程内注入接入 OneBot11。本项目位于该工作区内 `QQ-AI_Agent_bot` 子目录，与 QQ 本体目录同处一个工作区。
 
 ## 目录结构
@@ -88,20 +90,22 @@ pwsh -File .\scripts\start-qq-napcat.ps1
 # 构建（产物在 app\QQAgent.WinUI\bin\Release\net10.0-windows10.0.19041.0\win-x64\）
 dotnet build app\QQAgent.WinUI\QQAgent.WinUI.csproj -c Release -r win-x64
 
-# 一键打包到 dist\（主程序 + 启动器 + README.txt）
-pwsh -File scripts\build-gui.ps1 -Configuration Release -OutDir dist
+# 一键打包（默认输出到仓库根：QQAgent.exe + QQAgent.App\）
+pwsh -File scripts\build-gui.ps1 -Configuration Release
+# 也可指定输出目录，布局相同
+pwsh -File scripts\build-gui.ps1 -Configuration Release -OutDir .cache\pkg
 ```
 
 ### 分发形态
 
 ```
-dist\
-  QQAgent.exe    自举启动器（.NET Framework 4.7.2，Win10 自带，22.5 KB）
-  app\           主程序 QQAgent.WinUI.exe 及其依赖
-  README.txt
+QQAgent.exe          自举启动器（.NET Framework 4.7.2，Win10 自带，约 22.5 KB）
+QQAgent.App\
+  QQAgent.WinUI.exe  主程序及其依赖，请勿移动或改名
+  README.txt         分发说明
 ```
 
-整个 `dist\` 打包成 zip 即可分发；`dist/`、`launcher/bin/`、`app/**/bin|obj` 均不入库。
+把 `QQAgent.exe` 与 `QQAgent.App\` 一起打包成 zip 即可分发；`QQAgent.exe`、`QQAgent.App/`、`dist/`、`launcher/bin/`、`app/**/bin|obj` 均不入库。
 
 ### 自举说明
 
@@ -109,15 +113,15 @@ dist\
 
 1. **.NET 桌面运行时 10.x** —— 查 `C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App` 下是否有 `10.*` 目录；缺则下载 `https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe`，以 `/install /quiet /norestart` 静默安装（退出码 0 / 3010 视为成功）
 2. **Windows App Runtime 1.8** —— 先查注册表 `HKLM\SOFTWARE\Microsoft\WindowsAppRuntime\1.8*`（含 `WOW6432Node`），再查 `%ProgramFiles%\WindowsApps\Microsoft.WindowsAppRuntime.1.8*`、Appx 包仓库与 bootstrap 加载，多路取或（实测部分机器注册表键缺失，单靠注册表会误判）；缺则下载 `https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-x64.exe`（备用固定版本 `1.8.260921001`），以 `--quiet` 安装
-3. 全部就绪后拉起 `app\QQAgent.WinUI.exe`，启动器自身退出
+3. 全部就绪后拉起 `QQAgent.App\QQAgent.WinUI.exe`，启动器自身退出
 
 任一环节失败会弹窗写明失败阶段，并提供「打开下载页面」按钮（.NET / WinAppRuntime 官方下载页）。启动器带 `requireAdministrator` 清单，安装时自动请求 UAC。
 
 命令行参数：
 
 ```powershell
-.\dist\QQAgent.exe --check       # 只检测不安装，结果写入 %TEMP%\qqagent-launcher-check.txt，退出码 0/1
-.\dist\QQAgent.exe --no-install  # 检测到缺失时只提示，不自动安装
+.\QQAgent.exe --check       # 只检测不安装，结果写入 %TEMP%\qqagent-launcher-check.txt，退出码 0/1
+.\QQAgent.exe --no-install  # 检测到缺失时只提示，不自动安装
 ```
 
 ### Win10 兼容降级链

@@ -101,8 +101,8 @@ namespace QQAgent.Launcher
             if (!status.AppFound)
             {
                 ShowError("找不到主程序",
-                    "启动器同目录下没有 app\\QQAgent.WinUI.exe。\n\n"
-                    + "请确认 QQAgent.exe 与 app 文件夹在同一个目录（从 dist 压缩包整体解压后再双击）。",
+                    "启动器同目录下没有 QQAgent.App\\QQAgent.WinUI.exe。\n\n"
+                    + "请确认 QQAgent.exe 与 QQAgent.App 文件夹在同一个目录（整体解压后再双击）。",
                     null);
                 return 4;
             }
@@ -421,7 +421,11 @@ namespace QQAgent.Launcher
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             List<string> candidates = new List<string>();
+            // 1) 新布局：<exe目录>\QQAgent.App\
+            candidates.Add(Path.Combine(Path.Combine(baseDir, "QQAgent.App"), "QQAgent.WinUI.exe"));
+            // 2) 旧布局兼容：<exe目录>\app\
             candidates.Add(Path.Combine(Path.Combine(baseDir, "app"), "QQAgent.WinUI.exe"));
+            // 3) 与启动器同目录
             candidates.Add(Path.Combine(baseDir, "QQAgent.WinUI.exe"));
 
             try
@@ -430,8 +434,8 @@ namespace QQAgent.Launcher
                 DirectoryInfo parent = Directory.GetParent(trimmed);
                 if (parent != null)
                 {
-                    candidates.Add(Path.Combine(parent.FullName, "QQAgent.WinUI.exe"));
-                    candidates.Add(Path.Combine(Path.Combine(parent.FullName, "app"), "QQAgent.WinUI.exe"));
+                    // 4) 上一层：<exe目录>\..\QQAgent.App\
+                    candidates.Add(Path.Combine(Path.Combine(parent.FullName, "QQAgent.App"), "QQAgent.WinUI.exe"));
                 }
             }
             catch (Exception) { }

@@ -1,19 +1,34 @@
 ﻿# 一键打包 QQAgent 桌面端（WinUI 3 主程序 + 自举启动器）
-# 用法：pwsh -File scripts\build-gui.ps1 [-Configuration Release] [-OutDir dist]
+# 用法：pwsh -File scripts\build-gui.ps1 [-Configuration Release] [-OutDir <目录>]
+# 默认输出到仓库根：<根>\QQAgent.exe + <根>\QQAgent.App\
 param(
     [string]$Configuration = 'Release',
-    [string]$OutDir = 'dist'
+    [string]$OutDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
 
 $scriptDir = $PSScriptRoot
 $repoRoot  = Split-Path -Parent $scriptDir
-$full = if ([IO.Path]::IsPathRooted($OutDir)) { $OutDir } else { Join-Path $repoRoot $OutDir }
+
+if ([string]::IsNullOrWhiteSpace($OutDir)) {
+    $full = $repoRoot
+}
+elseif ([IO.Path]::IsPathRooted($OutDir)) {
+    $full = $OutDir
+}
+else {
+    $full = Join-Path $repoRoot $OutDir
+}
+$full = [IO.Path]::GetFullPath($full)
+if ($full -match '^[A-Za-z]:\\?$') { throw "拒绝输出到盘根：$full" }
 
 $proj = Join-Path $repoRoot 'app\QQAgent.WinUI\QQAgent.WinUI.csproj'
 $launcherScript = Join-Path $repoRoot 'launcher\build.ps1'
 $launcherExe = Join-Path $repoRoot 'launcher\bin\QQAgent.Launcher.exe'
+
+$targetExe = Join-Path $full 'QQAgent.exe'
+$targetApp = Join-Path $full 'QQAgent.App'
 
 Write-Host "[1/6] 构建主程序：$proj"
 & dotnet build $proj -c $Configuration -r win-x64 --nologo
@@ -30,23 +45,20 @@ if (-not $appExe) { throw "找不到 QQAgent.WinUI.exe 产物，请先确认 dot
 $appOutDir = $appExe.Directory.FullName
 Write-Host "[3/6] 主程序产物：$appOutDir"
 
-Write-Host "[4/6] 准备输出目录：$full"
-if (Test-Path -LiteralPath $full) {
-    $resolved = (Resolve-Path -LiteralPath $full).Path
-    if ($resolved.Length -lt ($repoRoot.Length + 3)) { throw "拒绝清理可疑路径：$resolved" }
-    Get-ChildItem -LiteralPath $resolved -Force | Remove-Item -Recurse -Force
-}
-else {
+Write-Host "[4/6] 输出目录：$full"
+if (-not (Test-Path -LiteralPath $full)) {
     New-Item -ItemType Directory -Path $full -Force | Out-Null
 }
+# 只清理旧的 QQAgent.exe 与 QQAgent.App，不动目录内其他文件
+if (Test-Path -LiteralPath $targetExe) { Remove-Item -LiteralPath $targetExe -Force }
+if (Test-Path -LiteralPath $targetApp) { Remove-Item -LiteralPath $targetApp -Recurse -Force }
+New-Item -ItemType Directory -Path $targetApp -Force | Out-Null
 
-$distApp = Join-Path $full 'app'
-New-Item -ItemType Directory -Path $distApp -Force | Out-Null
-Copy-Item -Path (Join-Path $appOutDir '*') -Destination $distApp -Recurse -Force
-Copy-Item -LiteralPath $launcherExe -Destination (Join-Path $full 'QQAgent.exe') -Force
-Write-Host "[5/6] 已复制主程序到 app\，启动器已重命名为 QQAgent.exe"
-$readme = @"
-QQAgent 桌面端（WinUI 3）
+Write-Host "[5/6] 复制产物：QQAgent.App\ + QQAgent.exe"
+Copy-Item -Path (Join-Path $appOutDir '*') -Destination $targetApp -Recurse -Force
+Copy-Item -LiteralPath $launcherExe -Destination $targetExe -Force
+
+$readme = 'QQAgent 桌面端（WinUI 3）
 =========================
 
 启动：双击 QQAgent.exe
@@ -65,15 +77,16 @@ QQAgent 桌面端（WinUI 3）
   QQAgent.exe --no-install  检测到缺失时只提示，不自动安装
 
 目录结构：
-  QQAgent.exe   自举启动器（负责检测/安装运行时并启动主程序）
-  app\          主程序 QQAgent.WinUI.exe 及其依赖，请勿移动或改名
+  QQAgent.exe     自举启动器（负责检测/安装运行时并启动主程序）
+  QQAgent.App\    主程序 QQAgent.WinUI.exe 及其依赖，请勿移动或改名
 
 系统要求：Windows 10 1809 及以上 / Windows 11，x64
-未签名分发时首次运行可能被 SmartScreen 拦截，选择“仍要运行”即可。
-"@
-[IO.File]::WriteAllText((Join-Path $full 'README.txt'), $readme, (New-Object System.Text.UTF8Encoding($true)))
-Write-Host "[6/6] 已写入 README.txt"
+未签名分发时首次运行可能被 SmartScreen 拦截，选择“仍要运行”即可。'
+[IO.File]::WriteAllText((Join-Path $targetApp 'README.txt'), $readme, (New-Object System.Text.UTF8Encoding($true)))
+Write-Host "[6/6] 已写入 QQAgent.App\README.txt"
 
-$files = @(Get-ChildItem -LiteralPath $full -Recurse -File)
-$sum = ($files | Measure-Object -Property Length -Sum).Sum
-Write-Host ("[dist] 文件数：{0}，总大小：{1:N0} 字节（{2:N1} MB）" -f $files.Count, $sum, ($sum / 1MB))
+$sum = (($(Get-ChildItem -LiteralPath $targetApp -Recurse -File) | Measure-Object -Property Length -Sum).Sum)
+$rel = if ($full -eq $repoRoot) { '.' } else { $full }
+Write-Host ("[dist] 输出目录：{0}" -f $rel)
+Write-Host ("[dist] QQAgent.exe：{0:N0} 字节" -f (Get-Item -LiteralPath $targetExe).Length)
+Write-Host ("[dist] QQAgent.App 文件数：{0}，总大小：{1:N0} 字节（{2:N1} MB）" -f ((Get-ChildItem -LiteralPath $targetApp -Recurse -File).Count), $sum, ($sum / 1MB))
