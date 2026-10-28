@@ -142,32 +142,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 卡片 5：外观 -->
-                <Border Style="{StaticResource CardBorderStyle}">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="外观" Style="{StaticResource SectionTitleStyle}" />
-                        <RadioButtons
-                            x:Name="ThemeChoice"
-                            MaxColumns="3"
-                            SelectionChanged="OnThemeChoiceChanged">
-                            <RadioButton Content="跟随系统" />
-                            <RadioButton Content="浅色" />
-                            <RadioButton Content="深色" />
-                        </RadioButtons>
-                        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,4,0,0">
-                            <Rectangle
-                                x:Name="AccentRect"
-                                Width="32"
-                                Height="24"
-                                RadiusX="4"
-                                RadiusY="4"
-                                Stroke="{ThemeResource CardStrokeColorDefaultBrush}"
-                                StrokeThickness="1" />
-                            <TextBlock x:Name="AccentText" VerticalAlignment="Center" Style="{StaticResource SecondaryTextStyle}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
                 <!-- 底部操作区 -->
                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,4,0,0">
                     <Button

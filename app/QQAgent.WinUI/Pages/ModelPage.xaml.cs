@@ -4,18 +4,14 @@ using System.IO;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using QQAgent.WinUI.Dialogs;
 using QQAgent.WinUI.Models;
 using QQAgent.WinUI.Services;
-using Windows.UI.ViewManagement;
 
 namespace QQAgent.WinUI.Pages;
 
 public sealed partial class ModelPage : Page
 {
-    private readonly UISettings _uiSettings = new();
-
     private AppSettings _settings = new();
     private string? _botRoot;
     private bool _loading;
@@ -37,8 +33,6 @@ public sealed partial class ModelPage : Page
         ProviderCombo.ItemsSource = Presets.All;
 
         Loaded += OnPageLoaded;
-        Unloaded += OnPageUnloaded;
-        _uiSettings.ColorValuesChanged += OnSystemColorChanged;
     }
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
@@ -50,11 +44,6 @@ public sealed partial class ModelPage : Page
 
         _loadedOnce = true;
         ReloadFromDisk();
-    }
-
-    private void OnPageUnloaded(object sender, RoutedEventArgs e)
-    {
-        _uiSettings.ColorValuesChanged -= OnSystemColorChanged;
     }
 
     /// <summary>从 settings.json + .env 回填全部控件。</summary>
@@ -80,12 +69,6 @@ public sealed partial class ModelPage : Page
             ProviderCombo.SelectedItem = preset;
 
             ReasonLevel.SelectedIndex = EffortToIndex(env.ReasoningEffort);
-            ThemeChoice.SelectedIndex = _settings.ThemeMode switch
-            {
-                ThemeMode.Light => 1,
-                ThemeMode.Dark => 2,
-                _ => 0,
-            };
 
             _personas = PersonaStore.ListAll(_botRoot ?? string.Empty);
             PersonaCombo.ItemsSource = _personas;
@@ -107,7 +90,6 @@ public sealed partial class ModelPage : Page
 
             SaveButton.IsEnabled = _botRoot is not null;
             ResetPrimaryState();
-            UpdateAccentSwatch();
         }
         catch (Exception ex)
         {
@@ -237,27 +219,6 @@ public sealed partial class ModelPage : Page
         {
             ResetPrimaryState();
         }
-    }
-
-    private void OnThemeChoiceChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_loading)
-        {
-            return;
-        }
-
-        ResetPrimaryState();
-
-        var mode = ThemeChoice.SelectedIndex switch
-        {
-            1 => ThemeMode.Light,
-            2 => ThemeMode.Dark,
-            _ => ThemeMode.System,
-        };
-
-        _settings.ThemeMode = mode;
-        _settings.Save();
-        App.ApplyTheme(mode);
     }
 
     // ---------- 人设 ----------
@@ -602,30 +563,6 @@ public sealed partial class ModelPage : Page
         ResultBar.Severity = severity;
         ResultBar.Message = message;
         ResultBar.IsOpen = true;
-    }
-
-    private void UpdateAccentSwatch()
-    {
-        try
-        {
-            var color = _uiSettings.GetColorValue(UIColorType.Accent);
-            AccentRect.Fill = new SolidColorBrush(color);
-            AccentText.Text = "#" + color.R.ToString("X2") + color.G.ToString("X2") + color.B.ToString("X2");
-        }
-        catch (Exception)
-        {
-            AccentText.Text = string.Empty;
-        }
-    }
-
-    private void OnSystemColorChanged(UISettings sender, object args)
-    {
-        if (DispatcherQueue is null)
-        {
-            return;
-        }
-
-        DispatcherQueue.TryEnqueue(UpdateAccentSwatch);
     }
 
     private static int EffortToIndex(string? effort)
