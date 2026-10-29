@@ -34,9 +34,13 @@ public sealed partial class ModelPage : Page
 
     private IReadOnlyList<PersonaItem> _personas = Array.Empty<PersonaItem>();
 
+    /// <summary>页面唯一的浮动提示。</summary>
+    private readonly TipHelper _tip;
+
     public ModelPage()
     {
         InitializeComponent();
+        _tip = new TipHelper(Tip);
         ProviderCombo.ItemsSource = Presets.All;
 
         Loaded += OnPageLoaded;
@@ -98,7 +102,7 @@ public sealed partial class ModelPage : Page
         }
         catch (Exception ex)
         {
-            ShowResult(InfoBarSeverity.Error, "读取配置失败：" + ex.Message);
+            ShowTip("读取配置", "读取配置失败：" + ex.Message, TipSeverity.Error);
         }
         finally
         {
@@ -347,7 +351,7 @@ public sealed partial class ModelPage : Page
 
         if (_botRoot is null)
         {
-            ShowResult(InfoBarSeverity.Error, "未找到 Bot 根目录，无法编辑人设");
+            ShowTip("编辑人设", "未找到 Bot 根目录，无法编辑人设", TipSeverity.Error);
             return;
         }
 
@@ -372,7 +376,7 @@ public sealed partial class ModelPage : Page
     {
         if (_botRoot is null)
         {
-            ShowResult(InfoBarSeverity.Error, "未找到 Bot 根目录，无法保存人设");
+            ShowTip("编辑人设", "未找到 Bot 根目录，无法保存人设", TipSeverity.Error);
             return;
         }
 
@@ -406,7 +410,7 @@ public sealed partial class ModelPage : Page
             }
 
             UpdatePersonaAutomationName();
-            ShowResult(InfoBarSeverity.Success, "人设已保存：" + saved.DisplayName);
+            ShowTip("编辑人设", "人设已保存：" + saved.DisplayName, TipSeverity.Success);
         }
         catch (Exception ex)
         {
@@ -468,7 +472,7 @@ public sealed partial class ModelPage : Page
         var root = _botRoot ?? EnvConfig.FindBotRoot();
         if (root is null)
         {
-            ShowResult(InfoBarSeverity.Error, "未找到 Bot 根目录（含 src\\main.py），无法写入 .env");
+            ShowTip("保存配置", "未找到 Bot 根目录（含 src\\main.py），无法写入 .env", TipSeverity.Error);
             return;
         }
 
@@ -478,7 +482,7 @@ public sealed partial class ModelPage : Page
             var picked = SelectedPersona;
             if (custom && picked is null)
             {
-                ShowResult(InfoBarSeverity.Warning, "自定义模式还没选人设，先选一个或点编辑新建");
+                ShowTip("保存配置", "自定义模式还没选人设，先选一个或点编辑新建", TipSeverity.Warning);
                 return;
             }
 
@@ -501,12 +505,12 @@ public sealed partial class ModelPage : Page
 
             _settings.Save();
             SaveButton.IsEnabled = true;
-            ShowResult(InfoBarSeverity.Success, "已保存");
+            ShowTip("保存配置", "已保存", TipSeverity.Success);
             EnterRestartState();
         }
         catch (Exception ex)
         {
-            ShowResult(InfoBarSeverity.Error, "写入失败：" + ex.Message);
+            ShowTip("保存配置", "写入失败：" + ex.Message, TipSeverity.Error);
         }
     }
 
@@ -562,11 +566,11 @@ public sealed partial class ModelPage : Page
             }
 
             var result = await Task.Run(runner.Start);
-            ShowResult(result.Ok ? InfoBarSeverity.Success : InfoBarSeverity.Error, result.Message);
+            ShowTip("立即重启", result.Message, result.Ok ? TipSeverity.Success : TipSeverity.Error);
         }
         catch (Exception ex)
         {
-            ShowResult(InfoBarSeverity.Error, "重启失败：" + ex.Message);
+            ShowTip("立即重启", "重启失败：" + ex.Message, TipSeverity.Error);
         }
         finally
         {
@@ -581,14 +585,13 @@ public sealed partial class ModelPage : Page
     {
         _loadedOnce = true;
         ReloadFromDisk();
-        ShowResult(InfoBarSeverity.Informational, "已重新载入 .env 与 settings.json");
+        ShowTip("重新载入", "已重新载入 .env 与 settings.json", TipSeverity.Info);
     }
 
-    private void ShowResult(InfoBarSeverity severity, string message)
+    /// <summary>统一提示入口：浮层 + 2.5 秒自动消失。</summary>
+    private void ShowTip(string title, string message, TipSeverity severity, FrameworkElement? target = null)
     {
-        ResultBar.Severity = severity;
-        ResultBar.Message = message;
-        ResultBar.IsOpen = true;
+        _tip.Show(target ?? SaveButton, title, message, severity);
     }
 
     private static int EffortToIndex(string? effort)

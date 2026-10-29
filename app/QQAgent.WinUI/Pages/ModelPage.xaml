@@ -160,7 +160,13 @@
                         Click="OnReloadClicked" />
                 </StackPanel>
 
-                <InfoBar x:Name="ResultBar" IsOpen="False" IsClosable="True" />
+                <!-- 提示浮层：不在布局流里，2.5 秒自动消失。 -->
+                <TeachingTip x:Name="Tip"
+                             IsOpen="False"
+                             IsLightDismissEnabled="True"
+                             PreferredPlacement="Bottom"
+                             CloseButtonContent="知道了"
+                             AutomationProperties.AutomationId="ResultTip" />
 
             </StackPanel>
         </Grid>

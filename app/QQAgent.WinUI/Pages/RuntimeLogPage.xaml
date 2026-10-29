@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="QQAgent.WinUI.Pages.RuntimeLogPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -7,29 +7,23 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Background="Transparent">
-
     <Grid Padding="28,20,28,28">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-
         <TextBlock Text="运行与日志"
                    Style="{StaticResource PageTitleStyle}"
                    Margin="0,0,0,12"
                    AutomationProperties.AutomationId="PageTitle" />
-
-        <!-- 状态行：圆点 + 文本 + 右侧启动/停止 -->
         <Border Grid.Row="1" Style="{StaticResource CardBorderStyle}" Padding="20,12,20,12" Margin="0,0,0,12">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-
                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                     <Ellipse x:Name="StateDot" Width="14" Height="14" VerticalAlignment="Center" />
                     <TextBlock x:Name="StateText"
@@ -38,7 +32,6 @@
                                VerticalAlignment="Center"
                                AutomationProperties.AutomationId="StateText" />
                 </StackPanel>
-
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                     <Button x:Name="StartButton"
                             Content="启动"
@@ -55,17 +48,12 @@
                 </StackPanel>
             </Grid>
         </Border>
-
-        <InfoBar x:Name="ResultBar" Grid.Row="2" IsOpen="False" IsClosable="True" Margin="0,0,0,8" />
-
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="12" Margin="0,0,0,8" VerticalAlignment="Center">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12" Margin="0,0,0,8" VerticalAlignment="Center">
             <ToggleSwitch x:Name="AutoScrollToggle" IsOn="True" OnContent="自动滚动" OffContent="自动滚动" Toggled="OnAutoScrollToggled" />
-            <Button Content="清空" Click="OnClearClicked" AutomationProperties.AutomationId="ClearLogButton" />
-            <Button Content="另存为…" Click="OnSaveAsClicked" AutomationProperties.AutomationId="SaveLogButton" />
+            <Button x:Name="ClearButton" Content="清空" Click="OnClearClicked" AutomationProperties.AutomationId="ClearLogButton" />
+            <Button x:Name="SaveAsButton" Content="另存为…" Click="OnSaveAsClicked" AutomationProperties.AutomationId="SaveLogButton" />
         </StackPanel>
-
-        <!-- 日志窗口：固定白底黑字，不随主题切换（浅色日志窗口在深色主题下同样保持白底）。 -->
-        <Border Grid.Row="4"
+        <Border Grid.Row="3"
                 Background="#FFFFFF"
                 BorderBrush="#E1E1E1"
                 BorderThickness="1"
@@ -86,5 +74,11 @@
                                AutomationProperties.AutomationId="LogText" />
             </ScrollViewer>
         </Border>
+        <TeachingTip x:Name="Tip"
+                     IsOpen="False"
+                     IsLightDismissEnabled="True"
+                     PreferredPlacement="Bottom"
+                     CloseButtonContent="知道了"
+                     AutomationProperties.AutomationId="ResultTip" />
     </Grid>
 </Page>

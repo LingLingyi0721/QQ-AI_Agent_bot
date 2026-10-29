@@ -25,9 +25,13 @@ public sealed partial class ErrorsPage : Page
     /// <summary>弹窗正在显示，避免连点重复打开。</summary>
     private bool _dialogOpen;
 
+    /// <summary>页面唯一的浮动提示。</summary>
+    private readonly TipHelper _tip;
+
     public ErrorsPage()
     {
         InitializeComponent();
+        _tip = new TipHelper(Tip);
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -75,7 +79,7 @@ public sealed partial class ErrorsPage : Page
         }
         catch (Exception ex)
         {
-            ShowNotice(InfoBarSeverity.Error, "扫描日志目录失败：" + ex.Message);
+            ShowTip("刷新", "扫描日志目录失败：" + ex.Message, TipSeverity.Error, RefreshButton);
         }
 
         list.Sort((a, b) => b.Modified.CompareTo(a.Modified));
@@ -108,7 +112,7 @@ public sealed partial class ErrorsPage : Page
     private void OnRefreshClicked(object sender, RoutedEventArgs e)
     {
         Reload();
-        ShowNotice(InfoBarSeverity.Informational, "已刷新，共 " + _items.Count + " 个日志文件");
+        ShowTip("刷新", "已刷新，共 " + _items.Count + " 个日志文件", TipSeverity.Info, RefreshButton);
     }
 
     private void OnOpenDirectoryClicked(object sender, RoutedEventArgs e)
@@ -119,11 +123,11 @@ public sealed partial class ErrorsPage : Page
             Directory.CreateDirectory(dir);
             var q = (char)34;
             Process.Start("explorer.exe", q + dir + q);
-            ShowNotice(InfoBarSeverity.Success, "已打开日志目录");
+            ShowTip("打开目录", "已打开日志目录", TipSeverity.Success, OpenDirectoryButton);
         }
         catch (Exception ex)
         {
-            ShowNotice(InfoBarSeverity.Error, "打开目录失败：" + ex.Message);
+            ShowTip("打开目录", "打开目录失败：" + ex.Message, TipSeverity.Error, OpenDirectoryButton);
         }
     }
 
@@ -146,7 +150,7 @@ public sealed partial class ErrorsPage : Page
         }
         catch (Exception ex)
         {
-            ShowNotice(InfoBarSeverity.Error, "打开日志失败：" + ex.Message);
+            ShowTip("查看日志", "打开日志失败：" + ex.Message, TipSeverity.Error, RefreshButton);
         }
         finally
         {
@@ -170,10 +174,9 @@ public sealed partial class ErrorsPage : Page
         }
     }
 
-    private void ShowNotice(InfoBarSeverity severity, string message)
+    /// <summary>统一提示入口：浮层 + 2.5 秒自动消失。</summary>
+    private void ShowTip(string title, string message, TipSeverity severity, FrameworkElement? target = null)
     {
-        NoticeBar.Severity = severity;
-        NoticeBar.Message = message;
-        NoticeBar.IsOpen = true;
+        _tip.Show(target ?? RefreshButton, title, message, severity);
     }
 }
