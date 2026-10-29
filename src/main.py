@@ -49,7 +49,7 @@ def _log_startup(cfg: dict, persona_path) -> None:
         llm.get("base_url"),
         mask_key(llm.get("api_key", "")),
     )
-    logger.info("人设     : %s (%s)", persona_path.name, llm_cfg.get("model"))
+    logger.info("人设     : %s (%s)", persona_path.name, llm.get("model"))
     logger.info("触发规则 : %s", _rule_summary(cfg))
 
 
