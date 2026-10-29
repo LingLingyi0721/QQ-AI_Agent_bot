@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
@@ -34,13 +34,12 @@ public sealed partial class ModelPage : Page
 
     private IReadOnlyList<PersonaItem> _personas = Array.Empty<PersonaItem>();
 
-    /// <summary>页面唯一的浮动提示。</summary>
-    private readonly TipHelper _tip;
+    /// <summary>上一次读取配置的失败原因（重新载入按钮用来决定是否提示）。</summary>
+    private string? _lastLoadError;
 
     public ModelPage()
     {
         InitializeComponent();
-        _tip = new TipHelper(Tip);
         ProviderCombo.ItemsSource = Presets.All;
 
         Loaded += OnPageLoaded;
@@ -61,9 +60,10 @@ public sealed partial class ModelPage : Page
         ReloadFromDisk();
     }
 
-    /// <summary>从 settings.json + .env 回填全部控件。</summary>
-    private void ReloadFromDisk()
+    /// <summary>从 settings.json + .env 回填全部控件。返回是否读取成功。</summary>
+    private bool ReloadFromDisk(bool announceError = true)
     {
+        var ok = true;
         _loading = true;
         try
         {
@@ -102,7 +102,12 @@ public sealed partial class ModelPage : Page
         }
         catch (Exception ex)
         {
-            ShowTip("读取配置", "读取配置失败：" + ex.Message, TipSeverity.Error);
+            ok = false;
+            _lastLoadError = ex.Message;
+            if (announceError)
+            {
+                ShowNotice("读取配置失败：" + ex.Message, OsdSeverity.Error);
+            }
         }
         finally
         {
@@ -115,6 +120,8 @@ public sealed partial class ModelPage : Page
             _suppressUrl = null;
             _suppressModel = null;
         });
+
+        return ok;
     }
 
     /// <summary>先按 Base URL 认预设，认不出再回落到 settings.json 里记的 id。</summary>
@@ -351,7 +358,7 @@ public sealed partial class ModelPage : Page
 
         if (_botRoot is null)
         {
-            ShowTip("编辑人设", "未找到 Bot 根目录，无法编辑人设", TipSeverity.Error);
+            ShowNotice("未找到 Bot 根目录，无法编辑人设", OsdSeverity.Error);
             return;
         }
 
@@ -376,7 +383,7 @@ public sealed partial class ModelPage : Page
     {
         if (_botRoot is null)
         {
-            ShowTip("编辑人设", "未找到 Bot 根目录，无法保存人设", TipSeverity.Error);
+            ShowNotice("未找到 Bot 根目录，无法保存人设", OsdSeverity.Error);
             return;
         }
 
@@ -410,7 +417,7 @@ public sealed partial class ModelPage : Page
             }
 
             UpdatePersonaAutomationName();
-            ShowTip("编辑人设", "人设已保存：" + saved.DisplayName, TipSeverity.Success);
+
         }
         catch (Exception ex)
         {
@@ -472,7 +479,7 @@ public sealed partial class ModelPage : Page
         var root = _botRoot ?? EnvConfig.FindBotRoot();
         if (root is null)
         {
-            ShowTip("保存配置", "未找到 Bot 根目录（含 src\\main.py），无法写入 .env", TipSeverity.Error);
+            ShowNotice("未找到 Bot 根目录（含 src\\main.py），无法写入 .env", OsdSeverity.Error);
             return;
         }
 
@@ -482,7 +489,7 @@ public sealed partial class ModelPage : Page
             var picked = SelectedPersona;
             if (custom && picked is null)
             {
-                ShowTip("保存配置", "自定义模式还没选人设，先选一个或点编辑新建", TipSeverity.Warning);
+                ShowNotice("自定义模式还没选人设，先选一个或点编辑新建", OsdSeverity.Warning);
                 return;
             }
 
@@ -505,12 +512,11 @@ public sealed partial class ModelPage : Page
 
             _settings.Save();
             SaveButton.IsEnabled = true;
-            ShowTip("保存配置", "已保存", TipSeverity.Success);
             EnterRestartState();
         }
         catch (Exception ex)
         {
-            ShowTip("保存配置", "写入失败：" + ex.Message, TipSeverity.Error);
+            ShowNotice("写入失败：" + ex.Message, OsdSeverity.Error);
         }
     }
 
@@ -566,11 +572,14 @@ public sealed partial class ModelPage : Page
             }
 
             var result = await Task.Run(runner.Start);
-            ShowTip("立即重启", result.Message, result.Ok ? TipSeverity.Success : TipSeverity.Error);
+            if (!result.Ok)
+            {
+                ShowNotice(result.Message, OsdSeverity.Error);
+            }
         }
         catch (Exception ex)
         {
-            ShowTip("立即重启", "重启失败：" + ex.Message, TipSeverity.Error);
+            ShowNotice("重启失败：" + ex.Message, OsdSeverity.Error);
         }
         finally
         {
@@ -584,14 +593,18 @@ public sealed partial class ModelPage : Page
     private void OnReloadClicked(object sender, RoutedEventArgs e)
     {
         _loadedOnce = true;
-        ReloadFromDisk();
-        ShowTip("重新载入", "已重新载入 .env 与 settings.json", TipSeverity.Info);
+
+        // 成功不提示（界面已按新配置回填），只有读取失败才提示。
+        if (!ReloadFromDisk(announceError: false))
+        {
+            ShowNotice("重新载入失败：" + _lastLoadError, OsdSeverity.Warning);
+        }
     }
 
-    /// <summary>统一提示入口：浮层 + 2.5 秒自动消失。</summary>
-    private void ShowTip(string title, string message, TipSeverity severity, FrameworkElement? target = null)
+    /// <summary>统一提示出口：只有 Warning / Error 才显示，成功与普通信息静默。</summary>
+    private void ShowNotice(string message, OsdSeverity severity)
     {
-        _tip.Show(target ?? SaveButton, title, message, severity);
+        QQAgent.WinUI.Services.Osd.Show(Osd, OsdIcon, OsdText, message, severity);
     }
 
     private static int EffortToIndex(string? effort)

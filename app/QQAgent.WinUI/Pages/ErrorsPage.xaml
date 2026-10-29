@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="QQAgent.WinUI.Pages.ErrorsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -25,14 +25,6 @@
             <Button x:Name="RefreshButton" Content="刷新" Click="OnRefreshClicked" AutomationProperties.AutomationId="RefreshLogsButton" />
             <Button x:Name="OpenDirectoryButton" Content="打开目录" Click="OnOpenDirectoryClicked" AutomationProperties.AutomationId="OpenLogDirectoryButton" />
         </StackPanel>
-
-        <!-- 提示浮层：不在布局流里，2.5 秒自动消失。 -->
-        <TeachingTip x:Name="Tip"
-                     IsOpen="False"
-                     IsLightDismissEnabled="True"
-                     PreferredPlacement="Bottom"
-                     CloseButtonContent="知道了"
-                     AutomationProperties.AutomationId="ResultTip" />
 
         <!-- 文件列表：一行三列（文件名 / 大小 / 修改时间），点击条目在本程序内弹窗查看。 -->
         <Grid Grid.Row="2">
@@ -103,5 +95,26 @@
                        Visibility="Collapsed"
                        AutomationProperties.AutomationId="EmptyLogFilesText" />
         </Grid>
+        <!-- 提示浮层：系统 OSD 式，只在需要特殊提示时出现，自动淡出，不接收点击。 -->
+        <Border x:Name="Osd"
+                Visibility="Collapsed"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Margin="0,0,0,36"
+                Background="#CC202020"
+                CornerRadius="20"
+                Padding="16,10"
+                IsHitTestVisible="False"
+                AutomationProperties.AutomationId="Osd">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon x:Name="OsdIcon" FontSize="14" Foreground="#FFFFFF" />
+                <TextBlock x:Name="OsdText"
+                           Foreground="#FFFFFF"
+                           FontSize="13"
+                           MaxWidth="520"
+                           TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="OsdText" />
+            </StackPanel>
+        </Border>
     </Grid>
 </Page>

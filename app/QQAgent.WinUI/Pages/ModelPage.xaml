@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="QQAgent.WinUI.Pages.ModelPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -9,170 +9,181 @@
     mc:Ignorable="d"
     Background="Transparent">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Padding="28,20,28,28">
-            <StackPanel MaxWidth="960" Spacing="12" HorizontalAlignment="Stretch">
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <Grid Padding="28,20,28,28">
+                <StackPanel MaxWidth="960" Spacing="12" HorizontalAlignment="Stretch">
 
-                <StackPanel Spacing="4" Margin="0,0,0,4">
-                    <TextBlock Text="模型配置" Style="{StaticResource PageTitleStyle}" />
-                    <TextBlock Text="改完点保存，重启后生效" Style="{StaticResource SecondaryTextStyle}" />
-                </StackPanel>
-
-                <!-- 卡片 1：服务商 -->
-                <Border Style="{StaticResource CardBorderStyle}">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="服务商" Style="{StaticResource SectionTitleStyle}" />
-                        <ComboBox
-                            x:Name="ProviderCombo"
-                            AutomationProperties.AutomationId="ProviderCombo"
-                            HorizontalAlignment="Stretch"
-                            SelectionChanged="OnProviderSelectionChanged">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="models:Preset">
-                                    <TextBlock Text="{x:Bind DisplayName}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                    <StackPanel Spacing="4" Margin="0,0,0,4">
+                        <TextBlock Text="模型配置" Style="{StaticResource PageTitleStyle}" />
+                        <TextBlock Text="改完点保存，重启后生效" Style="{StaticResource SecondaryTextStyle}" />
                     </StackPanel>
-                </Border>
 
-                <!-- 卡片 2：连接 -->
-                <Border Style="{StaticResource CardBorderStyle}">
-                    <StackPanel Spacing="14">
-                        <TextBlock Text="连接" Style="{StaticResource SectionTitleStyle}" />
-
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="Base URL" Style="{StaticResource SecondaryTextStyle}" />
-                            <TextBox
-                                x:Name="BaseUrlBox"
-                                PlaceholderText="https://api.deepseek.com/v1"
-                                TextChanged="OnBaseUrlChanged" />
+                    <!-- 卡片 1：服务商 -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="服务商" Style="{StaticResource SectionTitleStyle}" />
+                            <ComboBox
+                                x:Name="ProviderCombo"
+                                AutomationProperties.AutomationId="ProviderCombo"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnProviderSelectionChanged">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:Preset">
+                                        <TextBlock Text="{x:Bind DisplayName}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                         </StackPanel>
+                    </Border>
 
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="模型名" Style="{StaticResource SecondaryTextStyle}" />
-                            <TextBox
-                                x:Name="ModelBox"
-                                AutomationProperties.AutomationId="ModelBox"
-                                PlaceholderText="deepseek-chat"
-                                TextChanged="OnModelTextChanged" />
+                    <!-- 卡片 2：连接 -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="连接" Style="{StaticResource SectionTitleStyle}" />
+
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Base URL" Style="{StaticResource SecondaryTextStyle}" />
+                                <TextBox
+                                    x:Name="BaseUrlBox"
+                                    PlaceholderText="https://api.deepseek.com/v1"
+                                    TextChanged="OnBaseUrlChanged" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="模型名" Style="{StaticResource SecondaryTextStyle}" />
+                                <TextBox
+                                    x:Name="ModelBox"
+                                    AutomationProperties.AutomationId="ModelBox"
+                                    PlaceholderText="deepseek-chat"
+                                    TextChanged="OnModelTextChanged" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="API Key" Style="{StaticResource SecondaryTextStyle}" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid Grid.Column="0">
+                                        <PasswordBox
+                                            x:Name="ApiKeyBox"
+                                            PasswordChanged="OnApiKeyPasswordChanged" />
+                                        <TextBox
+                                            x:Name="ApiKeyPlainBox"
+                                            Visibility="Collapsed"
+                                            TextChanged="OnApiKeyPlainTextChanged" />
+                                    </Grid>
+                                    <ToggleButton
+                                        x:Name="RevealKeyToggle"
+                                        Grid.Column="1"
+                                        Width="44"
+                                        Height="32"
+                                        Padding="0"
+                                        VerticalAlignment="Center"
+                                        Checked="OnRevealKeyChecked"
+                                        Unchecked="OnRevealKeyUnchecked">
+                                        <FontIcon Glyph="&#xE7B3;" FontSize="14" />
+                                    </ToggleButton>
+                                </Grid>
+                            </StackPanel>
                         </StackPanel>
+                    </Border>
 
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="API Key" Style="{StaticResource SecondaryTextStyle}" />
+                    <!-- 卡片 3：人设（一套控件：模式单选 + 下拉 + 编辑） -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="人设" Style="{StaticResource SectionTitleStyle}" />
+
+                            <RadioButtons
+                                x:Name="PersonaMode"
+                                MaxColumns="2"
+                                SelectionChanged="OnPersonaModeChanged">
+                                <RadioButton Content="默认" />
+                                <RadioButton Content="自定义" />
+                            </RadioButtons>
+
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Grid Grid.Column="0">
-                                    <PasswordBox
-                                        x:Name="ApiKeyBox"
-                                        PasswordChanged="OnApiKeyPasswordChanged" />
-                                    <TextBox
-                                        x:Name="ApiKeyPlainBox"
-                                        Visibility="Collapsed"
-                                        TextChanged="OnApiKeyPlainTextChanged" />
-                                </Grid>
-                                <ToggleButton
-                                    x:Name="RevealKeyToggle"
+
+                                <ComboBox
+                                    x:Name="PersonaCombo"
+                                    Grid.Column="0"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.AutomationId="PersonaCombo"
+                                    SelectionChanged="OnPersonaSelectionChanged">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="models:PersonaOption">
+                                            <TextBlock Text="{x:Bind DisplayText}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+
+                                <Button
+                                    x:Name="EditPersonaButton"
                                     Grid.Column="1"
-                                    Width="44"
-                                    Height="32"
-                                    Padding="0"
-                                    VerticalAlignment="Center"
-                                    Checked="OnRevealKeyChecked"
-                                    Unchecked="OnRevealKeyUnchecked">
-                                    <FontIcon Glyph="&#xE7B3;" FontSize="14" />
-                                </ToggleButton>
+                                    Content="编辑"
+                                    AutomationProperties.AutomationId="EditPersonaButton"
+                                    Click="OnEditPersonaClicked" />
                             </Grid>
                         </StackPanel>
+                    </Border>
+                    <!-- 卡片 4：思考等级 -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="思考等级" Style="{StaticResource SectionTitleStyle}" />
+                            <RadioButtons
+                                x:Name="ReasonLevel"
+                                MaxColumns="4"
+                                SelectionChanged="OnReasonLevelChanged">
+                                <RadioButton Content="关闭" />
+                                <RadioButton Content="低" />
+                                <RadioButton Content="中" />
+                                <RadioButton Content="高" />
+                            </RadioButtons>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 底部操作区 -->
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,4,0,0">
+                        <Button
+                            x:Name="SaveButton"
+                            Content="保存配置"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="OnSaveClicked" />
+                        <Button
+                            x:Name="ReloadButton"
+                            Content="重新载入"
+                            Click="OnReloadClicked" />
                     </StackPanel>
-                </Border>
 
-                <!-- 卡片 3：人设（一套控件：模式单选 + 下拉 + 编辑） -->
-                <Border Style="{StaticResource CardBorderStyle}">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="人设" Style="{StaticResource SectionTitleStyle}" />
-
-                        <RadioButtons
-                            x:Name="PersonaMode"
-                            MaxColumns="2"
-                            SelectionChanged="OnPersonaModeChanged">
-                            <RadioButton Content="默认" />
-                            <RadioButton Content="自定义" />
-                        </RadioButtons>
-
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <ComboBox
-                                x:Name="PersonaCombo"
-                                Grid.Column="0"
-                                HorizontalAlignment="Stretch"
-                                AutomationProperties.AutomationId="PersonaCombo"
-                                SelectionChanged="OnPersonaSelectionChanged">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="models:PersonaOption">
-                                        <TextBlock Text="{x:Bind DisplayText}" />
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-
-                            <Button
-                                x:Name="EditPersonaButton"
-                                Grid.Column="1"
-                                Content="编辑"
-                                AutomationProperties.AutomationId="EditPersonaButton"
-                                Click="OnEditPersonaClicked" />
-                        </Grid>
-                    </StackPanel>
-                </Border>
-                <!-- 卡片 4：思考等级 -->
-                <Border Style="{StaticResource CardBorderStyle}">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="思考等级" Style="{StaticResource SectionTitleStyle}" />
-                        <RadioButtons
-                            x:Name="ReasonLevel"
-                            MaxColumns="4"
-                            SelectionChanged="OnReasonLevelChanged">
-                            <RadioButton Content="关闭" />
-                            <RadioButton Content="低" />
-                            <RadioButton Content="中" />
-                            <RadioButton Content="高" />
-                        </RadioButtons>
-                    </StackPanel>
-                </Border>
-
-                <!-- 底部操作区 -->
-                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,4,0,0">
-                    <Button
-                        x:Name="SaveButton"
-                        Content="保存配置"
-                        Style="{StaticResource AccentButtonStyle}"
-                        Click="OnSaveClicked" />
-                    <Button
-                        x:Name="ReloadButton"
-                        Content="重新载入"
-                        Click="OnReloadClicked" />
                 </StackPanel>
-
-                <!-- 提示浮层：不在布局流里，2.5 秒自动消失。 -->
-                <TeachingTip x:Name="Tip"
-                             IsOpen="False"
-                             IsLightDismissEnabled="True"
-                             PreferredPlacement="Bottom"
-                             CloseButtonContent="知道了"
-                             AutomationProperties.AutomationId="ResultTip" />
-
+            </Grid>
+        </ScrollViewer>
+        <!-- 提示浮层：系统 OSD 式，只在需要特殊提示时出现，自动淡出，不接收点击。 -->
+        <Border x:Name="Osd"
+                Visibility="Collapsed"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Margin="0,0,0,36"
+                Background="#CC202020"
+                CornerRadius="20"
+                Padding="16,10"
+                IsHitTestVisible="False"
+                AutomationProperties.AutomationId="Osd">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon x:Name="OsdIcon" FontSize="14" Foreground="#FFFFFF" />
+                <TextBlock x:Name="OsdText"
+                           Foreground="#FFFFFF"
+                           FontSize="13"
+                           MaxWidth="520"
+                           TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="OsdText" />
             </StackPanel>
-        </Grid>
-    </ScrollViewer>
+        </Border>
+    </Grid>
 </Page>
-
-
-
-

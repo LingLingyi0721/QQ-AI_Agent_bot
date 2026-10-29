@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="QQAgent.WinUI.Pages.RuntimeLogPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -74,11 +74,26 @@
                                AutomationProperties.AutomationId="LogText" />
             </ScrollViewer>
         </Border>
-        <TeachingTip x:Name="Tip"
-                     IsOpen="False"
-                     IsLightDismissEnabled="True"
-                     PreferredPlacement="Bottom"
-                     CloseButtonContent="知道了"
-                     AutomationProperties.AutomationId="ResultTip" />
+        <!-- 提示浮层：系统 OSD 式，只在需要特殊提示时出现，自动淡出，不接收点击。 -->
+        <Border x:Name="Osd"
+                Visibility="Collapsed"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Margin="0,0,0,36"
+                Background="#CC202020"
+                CornerRadius="20"
+                Padding="16,10"
+                IsHitTestVisible="False"
+                AutomationProperties.AutomationId="Osd">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon x:Name="OsdIcon" FontSize="14" Foreground="#FFFFFF" />
+                <TextBlock x:Name="OsdText"
+                           Foreground="#FFFFFF"
+                           FontSize="13"
+                           MaxWidth="520"
+                           TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="OsdText" />
+            </StackPanel>
+        </Border>
     </Grid>
 </Page>

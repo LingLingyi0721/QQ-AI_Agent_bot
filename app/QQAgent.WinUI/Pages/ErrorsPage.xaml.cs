@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -25,13 +25,9 @@ public sealed partial class ErrorsPage : Page
     /// <summary>弹窗正在显示，避免连点重复打开。</summary>
     private bool _dialogOpen;
 
-    /// <summary>页面唯一的浮动提示。</summary>
-    private readonly TipHelper _tip;
-
     public ErrorsPage()
     {
         InitializeComponent();
-        _tip = new TipHelper(Tip);
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -79,7 +75,7 @@ public sealed partial class ErrorsPage : Page
         }
         catch (Exception ex)
         {
-            ShowTip("刷新", "扫描日志目录失败：" + ex.Message, TipSeverity.Error, RefreshButton);
+            ShowNotice("扫描日志目录失败：" + ex.Message, OsdSeverity.Error);
         }
 
         list.Sort((a, b) => b.Modified.CompareTo(a.Modified));
@@ -111,8 +107,8 @@ public sealed partial class ErrorsPage : Page
 
     private void OnRefreshClicked(object sender, RoutedEventArgs e)
     {
+        // 刷新成功不提示：列表本身刷新即是反馈。
         Reload();
-        ShowTip("刷新", "已刷新，共 " + _items.Count + " 个日志文件", TipSeverity.Info, RefreshButton);
     }
 
     private void OnOpenDirectoryClicked(object sender, RoutedEventArgs e)
@@ -123,11 +119,10 @@ public sealed partial class ErrorsPage : Page
             Directory.CreateDirectory(dir);
             var q = (char)34;
             Process.Start("explorer.exe", q + dir + q);
-            ShowTip("打开目录", "已打开日志目录", TipSeverity.Success, OpenDirectoryButton);
         }
         catch (Exception ex)
         {
-            ShowTip("打开目录", "打开目录失败：" + ex.Message, TipSeverity.Error, OpenDirectoryButton);
+            ShowNotice("打开目录失败：" + ex.Message, OsdSeverity.Error);
         }
     }
 
@@ -150,7 +145,7 @@ public sealed partial class ErrorsPage : Page
         }
         catch (Exception ex)
         {
-            ShowTip("查看日志", "打开日志失败：" + ex.Message, TipSeverity.Error, RefreshButton);
+            ShowNotice("打开日志失败：" + ex.Message, OsdSeverity.Error);
         }
         finally
         {
@@ -174,9 +169,9 @@ public sealed partial class ErrorsPage : Page
         }
     }
 
-    /// <summary>统一提示入口：浮层 + 2.5 秒自动消失。</summary>
-    private void ShowTip(string title, string message, TipSeverity severity, FrameworkElement? target = null)
+    /// <summary>统一提示出口：只有 Warning / Error 才显示，成功与普通信息静默。</summary>
+    private void ShowNotice(string message, OsdSeverity severity)
     {
-        _tip.Show(target ?? RefreshButton, title, message, severity);
+        QQAgent.WinUI.Services.Osd.Show(Osd, OsdIcon, OsdText, message, severity);
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -47,8 +47,8 @@ public sealed partial class RuntimeLogPage : Page
     private readonly SolidColorBrush _systemBrush = new(Color.FromArgb(255, 0x0F, 0x6C, 0xBD));
     private readonly SolidColorBrush _stampBrush = new(Color.FromArgb(255, 0x8A, 0x8A, 0x8A));
 
-    /// <summary>页面唯一的浮动提示。</summary>
-    private readonly TipHelper _tip;
+    /// <summary>异常退出只提示一次，避免状态刷新重复冒同一条。</summary>
+    private bool _exitNotified;
 
     private bool _subscribed;
 
@@ -61,7 +61,6 @@ public sealed partial class RuntimeLogPage : Page
     public RuntimeLogPage()
     {
         InitializeComponent();
-        _tip = new TipHelper(Tip);
         Loaded += OnPageLoaded;
         Unloaded += OnPageUnloaded;
     }
@@ -109,6 +108,7 @@ public sealed partial class RuntimeLogPage : Page
             _starting = false;
 
             var pid = runner.Pid;
+            _exitNotified = false;
             SetState(_runningBrush, pid is int id && id > 0 ? "运行中 (PID " + id + ")" : "运行中");
             StartButton.IsEnabled = false;
             StopButton.IsEnabled = true;
@@ -130,6 +130,11 @@ public sealed partial class RuntimeLogPage : Page
             if (runner.LastExitCode is int code && code != 0)
             {
                 SetState(_failedBrush, "异常退出 (退出码 " + code + ")");
+                if (!_exitNotified)
+                {
+                    _exitNotified = true;
+                    ShowNotice("bot 异常退出，退出码 " + code, OsdSeverity.Error);
+                }
             }
             else
             {
@@ -151,10 +156,10 @@ public sealed partial class RuntimeLogPage : Page
         StateText.Text = text;
     }
 
-    /// <summary>统一提示入口：浮层 + 2.5 秒自动消失。</summary>
-    private void ShowTip(string title, string message, TipSeverity severity, FrameworkElement? target = null)
+    /// <summary>统一提示出口：只有 Warning / Error 才显示，成功与普通信息静默。</summary>
+    private void ShowNotice(string message, OsdSeverity severity)
     {
-        _tip.Show(target ?? StartButton, title, message, severity);
+        QQAgent.WinUI.Services.Osd.Show(Osd, OsdIcon, OsdText, message, severity);
     }
 
     // ---- 启动 / 停止 ----
@@ -162,45 +167,48 @@ public sealed partial class RuntimeLogPage : Page
     private async void OnStartClicked(object sender, RoutedEventArgs e)
     {
         var runner = BotRunner.Current;
-        if (_starting || runner.IsRunning)
+        if (runner.IsRunning)
         {
+            ShowNotice("bot 已在运行，无需重复启动", OsdSeverity.Warning);
+            return;
+        }
+
+        // 启动过程未结束（10 秒冷却期内）不重复拉起。
+        if (_starting)
+        {
+            ShowNotice("正在启动中，请稍候", OsdSeverity.Warning);
             return;
         }
 
         // 点击后立即进入启动中，不等 python 预检。
         _starting = true;
         UpdateProcessUi();
-        ShowTip("启动", "正在启动 bot …", TipSeverity.Info, StartButton);
         StartStartTimer();
 
         var result = await Task.Run(runner.Start);
 
         StopStartTimer();
         _starting = false;
-        ShowTip(
-            result.Ok ? "启动" : "启动失败",
-            result.Message,
-            result.Ok ? TipSeverity.Success : TipSeverity.Error,
-            StartButton);
+        _exitNotified = false;
+
+        if (!result.Ok)
+        {
+            var busy = string.Equals(result.Message, "已在运行", StringComparison.Ordinal);
+            ShowNotice(result.Message, busy ? OsdSeverity.Warning : OsdSeverity.Error);
+        }
+
         UpdateProcessUi();
     }
 
     private async void OnStopClicked(object sender, RoutedEventArgs e)
     {
         StopButton.IsEnabled = false;
-        ShowTip("停止", "正在停止 bot …", TipSeverity.Info, StopButton);
-
         var stopped = await Task.Run(BotRunner.Current.Stop);
 
         // Exited 事件在后台线程触发，给它一点时间把状态推回 UI。
         for (var i = 0; i < 20 && BotRunner.Current.IsRunning; i++)
         {
             await Task.Delay(50);
-        }
-
-        if (stopped)
-        {
-            ShowTip("停止", "已停止 bot 进程", TipSeverity.Success, StopButton);
         }
 
         UpdateProcessUi();
@@ -238,7 +246,7 @@ public sealed partial class RuntimeLogPage : Page
         }
 
         _starting = false;
-        ShowTip("启动超时", "10 秒内没有收到 bot 的运行状态", TipSeverity.Warning, StartButton);
+        ShowNotice("启动超时：10 秒内没有收到 bot 的运行状态", OsdSeverity.Warning);
         UpdateProcessUi();
     }
 
@@ -331,7 +339,6 @@ public sealed partial class RuntimeLogPage : Page
         BotRunner.Current.ClearRecent();
         _entries.Clear();
         LogText.Blocks.Clear();
-        ShowTip("清空日志", "已清空日志", TipSeverity.Info, ClearButton);
     }
 
     private async void OnSaveAsClicked(object sender, RoutedEventArgs e)
@@ -339,7 +346,7 @@ public sealed partial class RuntimeLogPage : Page
         var text = string.Join(Environment.NewLine, _entries.Select(line => line.Text));
         if (text.Length == 0)
         {
-            ShowTip("另存为", "当前没有日志可保存", TipSeverity.Warning, SaveAsButton);
+            ShowNotice("当前没有日志可保存", OsdSeverity.Warning);
             return;
         }
 
@@ -367,7 +374,6 @@ public sealed partial class RuntimeLogPage : Page
             }
 
             await FileIO.WriteTextAsync(file, text, Windows.Storage.Streams.UnicodeEncoding.Utf8);
-            ShowTip("另存为", "已保存到 " + file.Path, TipSeverity.Success, SaveAsButton);
         }
         catch (Exception)
         {
@@ -405,11 +411,10 @@ public sealed partial class RuntimeLogPage : Page
 
             var path = Path.Combine(dir, "gui-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".log");
             File.WriteAllText(path, text, new UTF8Encoding(false));
-            ShowTip("另存为", "已保存到 " + path, TipSeverity.Success, SaveAsButton);
         }
         catch (Exception ex)
         {
-            ShowTip("另存为", "保存失败：" + ex.Message, TipSeverity.Error, SaveAsButton);
+            ShowNotice("保存失败：" + ex.Message, OsdSeverity.Error);
         }
     }
 }
