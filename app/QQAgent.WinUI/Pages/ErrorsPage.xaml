@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="QQAgent.WinUI.Pages.ErrorsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -17,29 +17,28 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TextBlock Text="最近的报错"
+        <TextBlock Text="日志文件"
                    Style="{StaticResource PageTitleStyle}"
                    Margin="0,0,0,12"
                    AutomationProperties.AutomationId="PageTitle" />
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,8" VerticalAlignment="Center">
-            <Button Content="刷新" Click="OnRefreshClicked" AutomationProperties.AutomationId="RefreshErrorsButton" />
-            <Button Content="清空列表" Click="OnClearClicked" AutomationProperties.AutomationId="ClearErrorsButton" />
-            <Button Content="打开日志文件" Click="OnOpenLogClicked" AutomationProperties.AutomationId="OpenErrorLogButton" />
-            <Button Content="复制全部" Click="OnCopyAllClicked" AutomationProperties.AutomationId="CopyErrorsButton" />
+            <Button Content="刷新" Click="OnRefreshClicked" AutomationProperties.AutomationId="RefreshLogsButton" />
+            <Button Content="打开目录" Click="OnOpenDirectoryClicked" AutomationProperties.AutomationId="OpenLogDirectoryButton" />
         </StackPanel>
 
         <InfoBar x:Name="NoticeBar" Grid.Row="2" IsOpen="False" IsClosable="True" Margin="0,0,0,8" />
 
-        <!-- 条目式列表：每条报错一个独立卡片，最新的在最上面。 -->
+        <!-- 文件列表：一行三列（文件名 / 大小 / 修改时间），点击条目在本程序内弹窗查看。 -->
         <Grid Grid.Row="3">
-            <ListView x:Name="ErrorList"
+            <ListView x:Name="LogFileList"
                       SelectionMode="None"
-                      IsItemClickEnabled="False"
+                      IsItemClickEnabled="True"
+                      ItemClick="OnItemClick"
                       Background="Transparent"
                       Padding="0,0,4,0"
-                      AutomationProperties.AutomationId="ErrorList"
-                      AutomationProperties.Name="报错列表">
+                      AutomationProperties.AutomationId="LogFileList"
+                      AutomationProperties.Name="日志文件列表">
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="Padding" Value="0" />
@@ -52,28 +51,38 @@
                 </ListView.ItemContainerStyle>
 
                 <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="models:ErrorItem">
+                    <DataTemplate x:DataType="models:LogFileItem">
                         <Border Margin="0,0,0,6"
-                                Padding="12,10"
+                                Padding="14,10"
                                 CornerRadius="6"
                                 Background="#FFFFFF"
-                                BorderBrush="#F0D5D5"
-                                BorderThickness="1">
+                                BorderBrush="#E1E1E1"
+                                BorderThickness="1"
+                                AutomationProperties.Name="{x:Bind Name}"
+                                PointerEntered="OnItemPointerEntered"
+                                PointerExited="OnItemPointerExited">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="110" />
+                                    <ColumnDefinition Width="170" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="{x:Bind TimeText}"
-                                           FontFamily="Consolas"
+                                <TextBlock Text="{x:Bind Name}"
+                                           FontSize="13"
+                                           Foreground="#1F1F1F"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{x:Bind SizeText}"
                                            FontSize="12"
                                            Foreground="#8A8A8A"
-                                           Margin="0,0,12,0" />
-                                <TextBlock Grid.Column="1"
-                                           Text="{x:Bind Message}"
-                                           TextWrapping="Wrap"
-                                           FontSize="13"
-                                           Foreground="#C42B1C" />
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2"
+                                           Text="{x:Bind ModifiedText}"
+                                           FontSize="12"
+                                           FontFamily="Consolas"
+                                           Foreground="#8A8A8A"
+                                           VerticalAlignment="Center" />
                             </Grid>
                         </Border>
                     </DataTemplate>
@@ -81,12 +90,13 @@
             </ListView>
 
             <TextBlock x:Name="EmptyText"
-                       Text="暂无报错"
+                       Text="暂无日志文件"
                        FontSize="12"
                        Foreground="#9A9A9A"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
-                       AutomationProperties.AutomationId="EmptyErrorsText" />
+                       Visibility="Collapsed"
+                       AutomationProperties.AutomationId="EmptyLogFilesText" />
         </Grid>
     </Grid>
 </Page>

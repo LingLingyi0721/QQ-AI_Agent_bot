@@ -132,16 +132,16 @@
                     <Button x:Name="ErrorsNav" Tag="errors" Style="{StaticResource NavButtonStyle}"
                             Click="NavButton_Click"
                             AutomationProperties.AutomationId="NavErrors"
-                            AutomationProperties.Name="最近的报错">
+                            AutomationProperties.Name="日志文件">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="40" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <FontIcon Grid.Column="0" Glyph="&#xE7BA;" FontSize="16"
+                            <FontIcon Grid.Column="0" Glyph="&#xE7C3;" FontSize="16"
                                       HorizontalAlignment="Center" VerticalAlignment="Center"
                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock x:Name="ErrorsText" Grid.Column="1" Text="最近的报错"
+                            <TextBlock x:Name="ErrorsText" Grid.Column="1" Text="日志文件"
                                        FontSize="14" VerticalAlignment="Center"
                                        Opacity="0" Visibility="Collapsed" TextTrimming="CharacterEllipsis" />
                             <Border Tag="indicator" Width="3" Height="18" CornerRadius="1.5"

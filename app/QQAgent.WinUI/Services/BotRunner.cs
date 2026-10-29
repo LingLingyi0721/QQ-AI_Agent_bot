@@ -35,6 +35,7 @@ public sealed class BotRunner
     private int? _lastExitCode;
     private bool _hasExited;
     private bool _errorLogWriteFailed;
+    private bool _runLogWriteFailed;
 
     private BotRunner()
     {
@@ -135,6 +136,30 @@ public sealed class BotRunner
         }
     }
 
+    /// <summary>运行日志文件完整路径（全量输出）：bot 根目录下的 logs\run.log。</summary>
+    public string RunLogPath
+    {
+        get
+        {
+            var root = App.BotRoot ?? EnvConfig.FindBotRoot();
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                return Path.Combine(AppContext.BaseDirectory, "logs", "run.log");
+            }
+
+            return Path.Combine(root, "logs", "run.log");
+        }
+    }
+
+    /// <summary>日志目录（logs\）：日志文件列表页用于扫描。</summary>
+    public string LogDirectory
+    {
+        get
+        {
+            return Path.GetDirectoryName(ErrorLogPath) ?? Path.Combine(AppContext.BaseDirectory, "logs");
+        }
+    }
+
     /// <summary>启动 python -m src.main。返回 (是否成功, 说明)。</summary>
     public (bool Ok, string Message) Start()
     {
@@ -216,6 +241,7 @@ public sealed class BotRunner
         }
 
         AppendErrorLogLine("===== " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " 会话开始 (pid=" + pid + ") =====");
+        AppendRunLogLine("===== 会话开始 (pid=" + pid + ") =====");
 
         lock (_gate)
         {
@@ -369,6 +395,67 @@ public sealed class BotRunner
         }
     }
 
+    /// <summary>追加一行到运行日志文件；目录不存在则创建，超 5 MB 先滚动为 run.log.1。</summary>
+    private void AppendRunLogLine(string text)
+    {
+        try
+        {
+            var path = RunLogPath;
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            RollRunLogIfNeeded(path);
+            File.AppendAllText(path, text + Environment.NewLine, new UTF8Encoding(false));
+        }
+        catch (Exception ex)
+        {
+            PushRunLogFailure(ex);
+        }
+    }
+
+    /// <summary>文件超过 5 MB 时滚动：run.log 覆盖式改名为 run.log.1。</summary>
+    private static void RollRunLogIfNeeded(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length <= MaxErrorLogBytes)
+            {
+                return;
+            }
+
+            File.Move(path, path + ".1", overwrite: true);
+        }
+        catch (Exception)
+        {
+            // 滚动失败不阻塞本次追加
+        }
+    }
+
+    /// <summary>运行日志写入失败只提示一次，且不再尝试落盘（避免递归失败）。</summary>
+    private void PushRunLogFailure(Exception ex)
+    {
+        lock (_gate)
+        {
+            if (_runLogWriteFailed)
+            {
+                return;
+            }
+
+            _runLogWriteFailed = true;
+            _errors.Enqueue((DateTime.Now, "运行日志写入失败：" + ex.Message));
+            while (_errors.Count > MaxRecentErrors)
+            {
+                _errors.Dequeue();
+            }
+        }
+
+        ErrorsChanged?.Invoke();
+    }
+
     /// <summary>写文件失败只提示一次，且不再尝试落盘（避免递归失败）。</summary>
     private void PushErrorLogFailure(Exception ex)
     {
@@ -436,6 +523,9 @@ public sealed class BotRunner
 
     private void Publish(string text, bool isErr)
     {
+        // 全量运行日志：每条 stdout / stderr 行都带 [HH:mm:ss] 前缀落盘（与 errors.log 互不影响）。
+        AppendRunLogLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + text);
+
         lock (_gate)
         {
             _recent.Enqueue((text, isErr));
