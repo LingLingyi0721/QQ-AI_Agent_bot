@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 
 namespace QQAgent.WinUI.Services;
@@ -17,6 +18,9 @@ public sealed class BotRunner
     /// <summary>报错保留上限（超出丢弃最旧）。</summary>
     public const int MaxRecentErrors = 200;
 
+    /// <summary>错误日志文件单文件上限（5 MB，超出滚动）。</summary>
+    private const long MaxErrorLogBytes = 5L * 1024 * 1024;
+
     private static readonly Lazy<BotRunner> LazyInstance = new(() => new BotRunner());
 
     private readonly object _gate = new();
@@ -30,6 +34,7 @@ public sealed class BotRunner
     private int? _pid;
     private int? _lastExitCode;
     private bool _hasExited;
+    private bool _errorLogWriteFailed;
 
     private BotRunner()
     {
@@ -113,7 +118,24 @@ public sealed class BotRunner
                 return _errors.ToArray();
             }
         }
-    }    /// <summary>启动 python -m src.main。返回 (是否成功, 说明)。</summary>
+    }
+
+    /// <summary>错误日志文件的完整路径：bot 根目录下的 logs\errors.log。</summary>
+    public string ErrorLogPath
+    {
+        get
+        {
+            var root = App.BotRoot ?? EnvConfig.FindBotRoot();
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                return Path.Combine(AppContext.BaseDirectory, "logs", "errors.log");
+            }
+
+            return Path.Combine(root, "logs", "errors.log");
+        }
+    }
+
+    /// <summary>启动 python -m src.main。返回 (是否成功, 说明)。</summary>
     public (bool Ok, string Message) Start()
     {
         var root = App.BotRoot ?? EnvConfig.FindBotRoot();
@@ -193,6 +215,8 @@ public sealed class BotRunner
             pid = 0;
         }
 
+        AppendErrorLogLine("===== " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " 会话开始 (pid=" + pid + ") =====");
+
         lock (_gate)
         {
             _process = process;
@@ -271,12 +295,92 @@ public sealed class BotRunner
         ErrorsChanged?.Invoke();
     }
 
+    /// <summary>清空错误日志文件内容（独立档案，与内存缓冲互不影响）。</summary>
+    public void ClearErrorLogFile()
+    {
+        try
+        {
+            var path = ErrorLogPath;
+            if (File.Exists(path))
+            {
+                File.WriteAllText(path, string.Empty, new UTF8Encoding(false));
+            }
+        }
+        catch (Exception)
+        {
+            // 文件清不掉不影响运行
+        }
+    }
+
     /// <summary>把一条错误写入环形缓冲（stderr 行与系统级错误共用）。</summary>
     private void AddError(string text)
     {
+        var now = DateTime.Now;
         lock (_gate)
         {
-            _errors.Enqueue((DateTime.Now, text));
+            _errors.Enqueue((now, text));
+            while (_errors.Count > MaxRecentErrors)
+            {
+                _errors.Dequeue();
+            }
+        }
+
+        AppendErrorLogLine("[" + now.ToString("HH:mm:ss") + "] " + text);
+        ErrorsChanged?.Invoke();
+    }
+
+    /// <summary>追加一行到错误日志文件；目录不存在则创建，超 5 MB 先滚动为 errors.log.1。</summary>
+    private void AppendErrorLogLine(string text)
+    {
+        try
+        {
+            var path = ErrorLogPath;
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            RollErrorLogIfNeeded(path);
+            File.AppendAllText(path, text + Environment.NewLine, new UTF8Encoding(false));
+        }
+        catch (Exception ex)
+        {
+            PushErrorLogFailure(ex);
+        }
+    }
+
+    /// <summary>文件超过 5 MB 时滚动：errors.log 覆盖式改名为 errors.log.1。</summary>
+    private static void RollErrorLogIfNeeded(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length <= MaxErrorLogBytes)
+            {
+                return;
+            }
+
+            File.Move(path, path + ".1", overwrite: true);
+        }
+        catch (Exception)
+        {
+            // 滚动失败不阻塞本次追加
+        }
+    }
+
+    /// <summary>写文件失败只提示一次，且不再尝试落盘（避免递归失败）。</summary>
+    private void PushErrorLogFailure(Exception ex)
+    {
+        lock (_gate)
+        {
+            if (_errorLogWriteFailed)
+            {
+                return;
+            }
+
+            _errorLogWriteFailed = true;
+            _errors.Enqueue((DateTime.Now, "错误日志写入失败：" + ex.Message));
             while (_errors.Count > MaxRecentErrors)
             {
                 _errors.Dequeue();

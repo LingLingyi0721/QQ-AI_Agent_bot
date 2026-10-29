@@ -24,7 +24,8 @@
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,8" VerticalAlignment="Center">
             <Button Content="刷新" Click="OnRefreshClicked" AutomationProperties.AutomationId="RefreshErrorsButton" />
-            <Button Content="清空" Click="OnClearClicked" AutomationProperties.AutomationId="ClearErrorsButton" />
+            <Button Content="清空列表" Click="OnClearClicked" AutomationProperties.AutomationId="ClearErrorsButton" />
+            <Button Content="打开日志文件" Click="OnOpenLogClicked" AutomationProperties.AutomationId="OpenErrorLogButton" />
             <Button Content="复制全部" Click="OnCopyAllClicked" AutomationProperties.AutomationId="CopyErrorsButton" />
         </StackPanel>
 

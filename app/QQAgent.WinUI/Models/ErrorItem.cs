@@ -9,5 +9,6 @@ public sealed class ErrorItem
 
     public string Message { get; set; } = string.Empty;
 
-    public string TimeText => Time.ToString("HH:mm:ss");
+    /// <summary>展示用时间戳；文件里的纯文本行没有时间戳，留空。</summary>
+    public string TimeText { get; set; } = string.Empty;
 }
